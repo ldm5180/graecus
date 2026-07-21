@@ -1,0 +1,35 @@
+with "config/graecus_config.gpr";
+
+--  Graecus: SPARK-proven Black-Scholes IV and delta.  A pure library
+--  (zero IO, zero crate dependencies): the one unit carries SPARK_Mode
+--  and withs only Ada.Numerics' elementary functions behind a trusted,
+--  contract-carrying boundary.  Consumers build it through their Alire
+--  profile; the example and test crates select -O3/-O0 with the MODE
+--  external (the sml-ada convention).  proof/proof.gpr sources src/
+--  directly and withs nothing, keeping foreign code out of the proof
+--  tree.
+project Graecus is
+
+   for Library_Name use "Graecus";
+   for Library_Version use
+     Project'Library_Name & ".so." & Graecus_Config.Crate_Version;
+
+   for Source_Dirs use ("src/", "config/");
+   for Object_Dir use "obj/" & Graecus_Config.Build_Profile;
+   for Create_Missing_Dirs use "True";
+   for Library_Dir use "lib";
+
+   type Library_Type_Type is ("relocatable", "static", "static-pic");
+   Library_Type : Library_Type_Type :=
+     external ("GRAECUS_LIBRARY_TYPE", external ("LIBRARY_TYPE", "static"));
+   for Library_Kind use Library_Type;
+
+   package Compiler is
+      for Default_Switches ("Ada") use Graecus_Config.Ada_Compiler_Switches;
+   end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-Es"); --  Symbolic traceback
+   end Binder;
+
+end Graecus;

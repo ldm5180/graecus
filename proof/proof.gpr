@@ -1,0 +1,18 @@
+--  SPARK proof target.  Not built by `alr build`; analysed with
+--  `alr exec -- gnatprove -P proof/proof.gpr`.
+--
+--  Sources the library directly (rather than withing graecus.gpr) because
+--  the Alire-generated config gpr withs every dependency's project, which
+--  would drag AUnit into the proof tree.  The library has no crate
+--  dependencies at all, so this tree is exactly the proof harness + src --
+--  the simplest proof setup of any sibling.
+project Proof is
+
+   for Source_Dirs use ("src", "../src");
+   for Object_Dir use "obj";
+
+   package Compiler is
+      for Default_Switches ("Ada") use ("-gnat2022", "-gnata");
+   end Compiler;
+
+end Proof;
