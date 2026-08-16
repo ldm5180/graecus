@@ -1,0 +1,48 @@
+with "../graecus.gpr";
+
+--  Graecus's CPU micro-benchmark: a standalone main that times the four
+--  public entry points over a synthetic 0-DTE chain and prints CSV.  Not
+--  part of `alr build`, not part of the test suite, never linked into
+--  anything shipped -- `make bench` builds and runs it.
+--
+--  It exists because the numbers that justify a change to this crate's
+--  arithmetic have to be reproducible FROM THE REPO.  The bisection
+--  early-exit was measured on a scratchpad harness that no longer
+--  exists, so its 1.53x is on record with no way to re-run it; this is
+--  the fix for that.
+--
+--  MODE=release (-O3) is the only measurement that means anything; the
+--  debug profile is there for a sanity run, and its numbers must never
+--  be quoted.
+project Bench is
+
+   type Mode_Type is ("release", "debug");
+   Mode : Mode_Type := external ("MODE", "release");
+
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj/" & Mode;
+   for Exec_Dir use "bin/" & Mode;
+   for Create_Missing_Dirs use "True";
+   for Main use ("bench_graecus.adb");
+
+   package Builder is
+      for Switches ("Ada") use ("-j0"); --  build on all cores
+   end Builder;
+
+   package Compiler is
+      Common := ("-g", "-gnata", "-gnatwa", "-gnatwe", "-gnat2022");
+
+      case Mode is
+         when "release" =>
+            for Default_Switches ("Ada") use Common & ("-O3");
+
+         when "debug" =>
+            for Default_Switches ("Ada") use Common & ("-O0");
+      end case;
+   end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-Es"); --  Symbolic traceback.
+   end Binder;
+
+end Bench;
