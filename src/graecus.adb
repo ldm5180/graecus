@@ -271,10 +271,17 @@ is
       --  Vega at the solution decides whether the number means anything:
       --  S * pdf (d1) * sqrt (T), in dollars per 1.00 of vol.
       declare
-         Sqrt_T : constant Real := Real'Max (Sqrt_B (T), 1.0e-9);
-         D1v    : constant Real := D1 (S, K, T, V, R);
-         Vega   : constant Real :=
-           S * Inv_Sqrt_2_Pi * Exp_B (-0.5 * D1v * D1v) * Sqrt_T;
+         Sqrt_T : constant Root_Time := Real'Max (Sqrt_B (T), 1.0e-9);
+         D1v    : constant Sat_Real := D1 (S, K, T, V, R);
+
+         --  The peak of the density, scaled by spot: S <= 1.0e6 times
+         --  1 / sqrt (2 * pi) is under 4.0e5.
+         Peak : constant Real range 0.0 .. 4.0e5 := S * Inv_Sqrt_2_Pi;
+
+         --  The Gaussian factor: in [0, 1] by Exp_B's own postcondition.
+         Bell : constant Unit_Real := Exp_B (-0.5 * Square (D1v));
+
+         Vega : constant Real range 0.0 .. 4.0e5 := Peak * Bell * Sqrt_T;
       begin
          Q := (if Vega < Vega_Floor then Faint else Computed);
       end;
