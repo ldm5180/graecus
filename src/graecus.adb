@@ -228,8 +228,8 @@ is
       Floor_Price   : constant Real := Price (S, K, T, Min_Vol, R, Right);
       Ceiling_Price : constant Real := Price (S, K, T, Max_Vol, R, Right);
 
-      Lo : Real := Min_Vol;
-      Hi : Real := Max_Vol;
+      Lo : Vol_Range := Min_Vol;
+      Hi : Vol_Range := Max_Vol;
    begin
       --  No time value (or an absurd one): the premium sits outside the
       --  invertible band -- classify, never chase.
@@ -248,8 +248,6 @@ is
       --  halvings of [Min_Vol, Max_Vol] land far past Long_Float's
       --  resolution.
       for Step in 1 .. 60 loop
-         pragma Loop_Invariant (Lo >= Min_Vol);
-         pragma Loop_Invariant (Hi <= Max_Vol);
          pragma Loop_Invariant (Lo < Hi);
          declare
             Mid : constant Real := Lo + (Hi - Lo) / 2.0;
