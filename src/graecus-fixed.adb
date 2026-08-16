@@ -2,201 +2,171 @@ package body Graecus.Fixed
   with SPARK_Mode
 is
 
-   --  Working types.  All share Frac, so every product below rescales by
-   --  a shift; only the ranges differ, and each is the interval its own
-   --  operands can actually produce.
-   type Abs_Sat is delta Frac range 0.0 .. 40.0;
+   subtype LLI is Long_Long_Integer;
+   subtype LLLI is Long_Long_Long_Integer;
 
-   --  Signed so that negating the Gaussian exponent stays inside its own
-   --  type rather than needing a wider one to pass through.
-   type Square is delta Frac range -2_048.0 .. 2_048.0;
+   --  Everything below is a RAW value: the mathematical quantity times
+   --  Scale.  This is the same representation Ada's own fixed-point
+   --  types use -- what differs is who rescales a product.
+   --
+   --  Ada's "*" lowers to a CALL to System.Arith_64.Scaled_Divide64
+   --  whenever the product needs more than 63 bits, which at this scale
+   --  is always: a general 128-by-64 DIVISION for what is, because
+   --  Scale is a power of two, a shift.  Measured at 12.6 ns per
+   --  multiply.  Doing the promotion by hand into the 128-bit integer
+   --  GNAT has had since Ada 2022 costs 1.2 ns -- a 64x64 -> 128
+   --  multiply and a shift, inline, no call.
+   Half : constant LLLI := Scale / 2;
 
-   --  The A-S coefficients: three of the five exceed 1.0 in magnitude.
-   type Coef is delta Frac range -2.0 .. 2.0;
+   --  The widest operand any multiply below is handed, and the bound
+   --  that keeps the promoted product far inside 128 bits.
+   Lim : constant LLI := 64 * Scale;
 
-   --  The Horner accumulator.  Every stage provably lands in about
-   --  [-0.36, 1.79]; the wider range is headroom so a rounding at an
-   --  edge cannot raise Constraint_Error before the clamp runs.
-   type Horner is delta Frac range -4.0 .. 4.0;
-   type Stage is delta Frac range -2.0 .. 2.0;
+   subtype Operand is LLI range -Lim .. Lim;
+   subtype R_Stage is Operand range -2 * Scale .. 2 * Scale;
+   subtype R_Horner is Operand range -4 * Scale .. 4 * Scale;
+   subtype R_Abs is Operand range 0 .. 40 * Scale;
 
-   --  exp's range reduction.  Sixteen steps per octave: the table below
-   --  absorbs the fractional part, leaving a remainder under ln (2) / 16
-   --  where a degree-six series is good to ~6e-14 -- a fifteenth of an
-   --  LSB, so the polynomial is not what limits accuracy.
-   type Pos_Arg is delta Frac range 0.0 .. 32.0;
-   type Reduced is delta Frac range 0.0 .. 1_024.0;
-   type Scale is delta Frac range 0.0 .. 32.0;
-   type Signed_Arg is delta Frac range -2_048.0 .. 2_048.0;
+   --  Round half away from zero, matching what Ada's fixed-point
+   --  multiply does -- truncating instead would bias every one of the
+   --  eighteen products the same direction and the drift would compound.
+   function Mul (A, B : Operand) return LLI
+   is (LLI
+         (if LLLI (A) * LLLI (B) >= 0
+          then (LLLI (A) * LLLI (B) + Half) / LLLI (Scale)
+          else (LLLI (A) * LLLI (B) - Half) / LLLI (Scale)))
+   with Post => abs Mul'Result <= 4_096 * Scale + 1;
 
-   --  The reduction's remainder.  Slack on BOTH sides: the step count is
-   --  a floor of a ROUNDED product, so the remainder can land a hair
-   --  below zero.
-   type Rem_Arg is delta Frac range -1.0 .. 1.0;
+   function Div (A, B : Operand) return LLI
+   is (LLI ((LLLI (A) * LLLI (Scale) + LLLI (B) / 2) / LLLI (B)))
+   with Pre => B > 0 and then A >= 0 and then A <= B;
 
-   --  Every constant below is irrational or a repeating fraction, so
-   --  none of them is an exact multiple of a binary Small and GNAT says
-   --  so at each one.  Rounding each to the nearest representable value
-   --  is exactly the intent -- that is what a fixed-point literal MEANS
-   --  -- and the accuracy this costs is what Graecus_Fixed_Tests
-   --  measures.  Warning suppressed here rather than crate-wide so any
-   --  OTHER unit that hits it still fails the build.
-   pragma
-     Warnings (Off, "static fixed-point value is not a multiple of Small");
+   --  Raw constants: the value times Scale, rounded.
+   Ln2_16     : constant LLI := 47_632_711_549;
+   Inv_Ln2_16 : constant LLI := 25_380_159_564_675;
 
-   Ln2_16     : constant Pos_Arg := 0.043_321_698_784_996_58;
-   Inv_Ln2_16 : constant Scale := 23.083_120_654_223_414;
+   --  exp is under half an LSB below here, so the answer is exactly
+   --  zero -- the fixed-point analogue of the float version's
+   --  observation that the tails past |x| = 40 sit under 1e-300.
+   Cutoff : constant LLI := -28 * Scale;
 
-   --  Below this, exp is under half an LSB: 6.9e-13 against a 9.1e-13
-   --  grid.  Answering exactly zero here is what makes the function
-   --  total over the whole saturated argument range, and it is the
-   --  fixed-point analogue of the float version's observation that the
-   --  tails past |x| = 40 sit under 1e-300.
-   Cutoff : constant Exp_Arg := -28.0;
-
-   --  2 ** (-J / 16): the fractional half of the range reduction.
-   Tab : constant array (0 .. 15) of Unit :=
-     [0  => 1.0,
-      1  => 0.957_603_280_698_573_6,
-      2  => 0.917_004_043_204_671_2,
-      3  => 0.878_126_080_186_649_5,
-      4  => 0.840_896_415_253_714_5,
-      5  => 0.805_245_165_974_627_1,
-      6  => 0.771_105_412_703_970_4,
-      7  => 0.738_413_072_969_749_6,
-      8  => 0.707_106_781_186_547_6,
-      9  => 0.677_127_773_468_446_3,
-      10 => 0.648_419_777_325_504_8,
-      11 => 0.620_928_906_036_742_0,
-      12 => 0.594_603_557_501_360_5,
-      13 => 0.569_394_317_378_345_8,
-      14 => 0.545_253_866_332_628_8,
-      15 => 0.522_136_891_213_706_9];
-
-   --  The series coefficients, 1 / k!.
-   C1 : constant Horner := 1.0;
-   C2 : constant Horner := 0.5;
-   C3 : constant Horner := 0.166_666_666_666_666_66;
-   C4 : constant Horner := 0.041_666_666_666_666_664;
-   C5 : constant Horner := 0.008_333_333_333_333_333;
-   C6 : constant Horner := 0.001_388_888_888_888_889;
-
-   --  The divisors, tabulated rather than written 2 ** N.  gnatprove
-   --  will not bound an exponentiation by a variable -- it was the ONLY
-   --  thing in this unit it could not discharge -- and a table turns
-   --  each divide into an index check the guards below settle outright.
+   --  2 ** (-J / 16), raw.
    --!format off
-   Pow2 : constant array (0 .. 30) of Positive :=
-     [1,          2,          4,           8,           16,
-      32,         64,         128,         256,         512,
-      1_024,      2_048,      4_096,       8_192,       16_384,
-      32_768,     65_536,     131_072,     262_144,     524_288,
-      1_048_576,  2_097_152,  4_194_304,   8_388_608,   16_777_216,
-      33_554_432, 67_108_864, 134_217_728, 268_435_456, 536_870_912,
-      1_073_741_824];
+   Tab : constant array (0 .. 15) of Unit :=
+     [1_099_511_627_776, 1_052_895_941_925, 1_008_256_608_221,
+        965_509_835_819,   924_575_386_327,   885_376_423_200,
+        847_839_367_509,   811_893_759_832,   777_472_127_994,
+        744_509_860_419,   712_945_084_849,   682_718_552_210,
+        653_773_525_390,   626_055_672_747,   599_512_966_123,
+        574_095_583_180];
    --!format on
 
-   --  Halve N times.  Ada's fixed-by-integer divide needs its divisor to
-   --  fit an Integer and N reaches 40, so the shift is split in two.
-   --  Past 40 the result is below one LSB and the answer is zero, which
-   --  is what makes this total.
+   --  1 / k!, raw.
+   C1 : constant LLI := 1_099_511_627_776;
+   C2 : constant LLI := 549_755_813_888;
+   C3 : constant LLI := 183_251_937_963;
+   C4 : constant LLI := 45_812_984_491;
+   C5 : constant LLI := 9_162_596_898;
+   C6 : constant LLI := 1_527_099_483;
+
+   --!format off
+   Pow2 : constant array (0 .. 40) of LLI :=
+     [1,             2,             4,             8,             16,
+      32,            64,            128,           256,           512,
+      1_024,         2_048,         4_096,         8_192,         16_384,
+      32_768,        65_536,        131_072,       262_144,       524_288,
+      1_048_576,     2_097_152,     4_194_304,     8_388_608,     16_777_216,
+      33_554_432,    67_108_864,    134_217_728,   268_435_456,   536_870_912,
+      1_073_741_824, 2_147_483_648, 4_294_967_296, 8_589_934_592,
+      17_179_869_184, 34_359_738_368, 68_719_476_736, 137_438_953_472,
+      274_877_906_944, 549_755_813_888, 1_099_511_627_776];
+   --!format on
+
+   --  Halve N times.  Past 40 the result is below one LSB and the answer
+   --  is zero, which is what makes this total.
    function Halved (V : Unit; N : Natural) return Unit
-   is (if N = 0
-       then V
-       elsif N >= 41
-       then 0.0
-       elsif N <= 30
-       then V / Pow2 (N)
-       else (V / Pow2 (30)) / Pow2 (N - 30));
+   is (if N >= 41 then 0 else V / Pow2 (N));
+
+   function Clamp (V, Lo, Hi : LLI) return LLI
+   is (if V < Lo then Lo elsif V > Hi then Hi else V);
 
    --  exp (-R) for a remainder under ln (2) / 16, by its series.
-   function Series (R : Rem_Arg) return Stage is
-      U  : constant Horner := Horner (-R);
-      P5 : constant Horner := C5 + Horner (U * C6);
-      P4 : constant Horner := C4 + Horner (U * P5);
-      P3 : constant Horner := C3 + Horner (U * P4);
-      P2 : constant Horner := C2 + Horner (U * P3);
-      P1 : constant Horner := C1 + Horner (U * P2);
-      P0 : constant Horner := C1 + Horner (U * P1);
+   function Series (R : R_Horner) return R_Stage is
+      U  : constant R_Horner := -R;
+      P5 : constant LLI := C5 + Mul (U, C6);
+      P4 : constant LLI := C4 + Mul (U, Clamp (P5, -4 * Scale, 4 * Scale));
+      P3 : constant LLI := C3 + Mul (U, Clamp (P4, -4 * Scale, 4 * Scale));
+      P2 : constant LLI := C2 + Mul (U, Clamp (P3, -4 * Scale, 4 * Scale));
+      P1 : constant LLI := C1 + Mul (U, Clamp (P2, -4 * Scale, 4 * Scale));
+      P0 : constant LLI := C1 + Mul (U, Clamp (P1, -4 * Scale, 4 * Scale));
    begin
-      return Stage (Horner'Min (2.0, Horner'Max (-2.0, P0)));
+      return Clamp (P0, -2 * Scale, 2 * Scale);
    end Series;
 
    function Exp (X : Exp_Arg) return Unit is
    begin
       if X <= Cutoff then
-         return 0.0;
+         return 0;
       end if;
 
       declare
-         Neg : constant Pos_Arg := Pos_Arg (-X);
+         Neg : constant LLI := Clamp (-X, 0, 32 * Scale);
 
          --  How many sixteenths of an octave down: under 28 * 16 / ln 2,
          --  just short of 647.
-         Y : constant Reduced := Reduced (Neg * Inv_Ln2_16);
-
-         --  Floor, the long way round: 'Truncation is a float-only
-         --  attribute, and Ada's fixed-to-integer conversion rounds to
-         --  NEAREST.  Round, then step back if that overshot.  The step
-         --  cannot underflow: Reduced (0) is zero and Y is never
-         --  negative, so a zero round is never the overshooting one.
-         M0 : constant Natural := Natural (Y);
-         M  : constant Natural := (if Reduced (M0) > Y then M0 - 1 else M0);
+         Y : constant LLI := Mul (Neg, Inv_Ln2_16);
+         M : constant Natural := Natural (Clamp (Y / Scale, 0, 1_024));
 
          N : constant Natural := M / 16;
          J : constant Natural := M mod 16;
 
-         Rest : constant Signed_Arg :=
-           Signed_Arg (Neg) - Signed_Arg (Ln2_16 * M);
-         R    : constant Rem_Arg :=
-           Rem_Arg (Signed_Arg'Min (1.0, Signed_Arg'Max (-1.0, Rest)));
+         R : constant R_Horner :=
+           Clamp (Neg - Ln2_16 * LLI (M), -4 * Scale, 4 * Scale);
 
          --  2 ** (-J / 16) * exp (-R): still inside one octave.
-         Whole : constant Horner := Horner (Tab (J) * Series (R));
+         Whole : constant LLI := Mul (Tab (J), Series (R));
       begin
-         return Halved (Unit (Horner'Min (1.0, Horner'Max (0.0, Whole))), N);
+         return Halved (Clamp (Whole, 0, Scale), N);
       end;
    end Exp;
 
-   --  Abramowitz-Stegun 26.2.17, coefficient for coefficient with the
-   --  float Norm_Cdf beside it.
-   B1 : constant Coef := 0.319_381_530;
-   B2 : constant Coef := -0.356_563_782;
-   B3 : constant Coef := 1.781_477_937;
-   B4 : constant Coef := -1.821_255_978;
-   B5 : constant Coef := 1.330_274_429;
+   --  Abramowitz-Stegun 26.2.17, raw.
+   B1 : constant LLI := 351_163_705_932;
+   B2 : constant LLI := -392_046_024_353;
+   B3 : constant LLI := 1_958_755_706_358;
+   B4 : constant LLI := -2_002_492_124_968;
+   B5 : constant LLI := 1_462_652_202_819;
 
-   Rate          : constant Coef := 0.231_641_9;
-   Inv_Sqrt_2_Pi : constant Coef := 0.398_942_280_401_432_678;
-
-   function Staged (X : Horner) return Stage
-   is (Stage (Horner'Min (2.0, Horner'Max (-2.0, X))));
+   Rate          : constant LLI := 254_692_962_530;
+   Inv_Sqrt_2_Pi : constant LLI := 438_641_676_113;
 
    function Norm_Cdf (X : Sat) return Unit is
-      Ax : constant Abs_Sat := Abs_Sat (Sat'Min (abs X, 40.0));
+      Ax : constant R_Abs := Clamp (abs X, 0, 40 * Scale);
 
-      One_D : constant Reduced := 1.0;
-      Denom : constant Reduced := One_D + Reduced (Rate * Ax);
-
-      K : constant Unit := Unit (One_D / Denom);
+      Denom : constant LLI := Scale + Mul (Rate, Ax);
+      K     : constant Unit := Div (Scale, Denom);
 
       --  Horner's rule one clamped stage at a time, exactly as the float
       --  version does it: the clamps never bind, they hand each product
       --  a bounded operand.
-      P4   : constant Stage := Staged (Horner (B4) + Horner (K * B5));
-      P3   : constant Stage := Staged (Horner (B3) + Horner (K * P4));
-      P2   : constant Stage := Staged (Horner (B2) + Horner (K * P3));
-      P1   : constant Stage := Staged (Horner (B1) + Horner (K * P2));
-      Poly : constant Stage := Staged (Horner (K * P1));
+      P4   : constant R_Stage :=
+        Clamp (B4 + Mul (K, B5), -2 * Scale, 2 * Scale);
+      P3   : constant R_Stage :=
+        Clamp (B3 + Mul (K, P4), -2 * Scale, 2 * Scale);
+      P2   : constant R_Stage :=
+        Clamp (B2 + Mul (K, P3), -2 * Scale, 2 * Scale);
+      P1   : constant R_Stage :=
+        Clamp (B1 + Mul (K, P2), -2 * Scale, 2 * Scale);
+      Poly : constant R_Stage := Clamp (Mul (K, P1), -2 * Scale, 2 * Scale);
 
-      Sq  : constant Square := Square (Ax * Ax);
-      Arg : constant Exp_Arg := Exp_Arg (-(Sq / 2));
+      Sq  : constant LLI := Mul (Ax, Ax);
+      Arg : constant LLI := -(Sq / 2);
 
-      Pdf   : constant Unit := Unit (Inv_Sqrt_2_Pi * Exp (Arg));
-      Upper : constant Unit :=
-        Unit (Horner'Min (1.0, Horner'Max (0.0, Horner (Pdf * Poly))));
+      Pdf   : constant Unit :=
+        Clamp (Mul (Inv_Sqrt_2_Pi, Exp (Arg)), 0, Scale);
+      Upper : constant Unit := Clamp (Mul (Pdf, Poly), 0, Scale);
    begin
-      return (if X >= 0.0 then 1.0 - Upper else Upper);
+      return (if X >= 0 then Scale - Upper else Upper);
    end Norm_Cdf;
 
 end Graecus.Fixed;

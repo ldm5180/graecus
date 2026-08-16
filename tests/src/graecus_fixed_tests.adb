@@ -14,16 +14,23 @@ with Graecus.Fixed;
 package body Graecus_Fixed_Tests is
 
    use AUnit.Test_Cases.Registration;
-   use type Graecus.Fixed.Sat;
-   use type Graecus.Fixed.Unit;
 
    package Elf renames Ada.Numerics.Long_Elementary_Functions;
 
    subtype Real is Graecus.Real;
+   subtype Raw is Graecus.Fixed.Raw;
 
-   --  What the fixed types can represent at all: 2**(-40).  Nothing
+   Scale : constant Real := Real (Graecus.Fixed.Scale);
+
+   --  What the scaled integers can represent at all: 2**(-40).  Nothing
    --  below this is a meaningful disagreement, it is the grid.
-   Lsb : constant Real := 2.0**(-40);
+   Lsb : constant Real := 1.0 / Scale;
+
+   function Raw_Of (X : Real) return Raw
+   is (Raw (X * Scale));
+
+   function Val_Of (R : Raw) return Real
+   is (Real (R) / Scale);
 
    function Img (X : Real) return String
    is (Real'Image (X));
@@ -42,8 +49,7 @@ package body Graecus_Fixed_Tests is
       for I in 0 .. Steps loop
          declare
             X : constant Real := -28.0 * Real (I) / Real (Steps);
-            F : constant Real :=
-              Real (Graecus.Fixed.Exp (Graecus.Fixed.Exp_Arg (X)));
+            F : constant Real := Val_Of (Graecus.Fixed.Exp (Raw_Of (X)));
             E : constant Real := Elf.Exp (X);
             D : constant Real := abs (F - E);
          begin
@@ -64,12 +70,14 @@ package body Graecus_Fixed_Tests is
 
       --  Past the cutoff the true value is under half an LSB.
       Assert
-        (Graecus.Fixed.Exp (Graecus.Fixed.Exp_Arg (-30.0)) = 0.0,
+        (Graecus.Fixed.Exp (Raw_Of (-30.0)) = 0,
          "exp past the representable floor must be exactly zero");
       Assert
-        (Graecus.Fixed.Exp (Graecus.Fixed.Exp_Arg (-800.0)) = 0.0,
+        (Graecus.Fixed.Exp (Raw_Of (-800.0)) = 0,
          "exp at the saturated CDF argument must be exactly zero");
-      Assert (Graecus.Fixed.Exp (0.0) = 1.0, "exp (0) must be exactly one");
+      Assert
+        (Graecus.Fixed.Exp (0) = Graecus.Fixed.Scale,
+         "exp (0) must be exactly one");
    end Test_Exp;
 
    --  The spike's headline: does a fixed-point Norm_Cdf agree with the
@@ -85,8 +93,7 @@ package body Graecus_Fixed_Tests is
       for I in 0 .. Steps loop
          declare
             X : constant Real := -8.0 + 16.0 * Real (I) / Real (Steps);
-            F : constant Real :=
-              Real (Graecus.Fixed.Norm_Cdf (Graecus.Fixed.Sat (X)));
+            F : constant Real := Val_Of (Graecus.Fixed.Norm_Cdf (Raw_Of (X)));
             E : constant Real := Graecus.Norm_Cdf (X);
             D : constant Real := abs (F - E);
          begin
@@ -109,6 +116,7 @@ package body Graecus_Fixed_Tests is
    procedure Test_Norm_Cdf_Tails (T : in out AUnit.Test_Cases.Test_Case'Class)
    is
       pragma Unreferenced (T);
+      One : constant Raw := Graecus.Fixed.Scale;
    begin
       --  Not "is it a half": A-S 26.2.17 answers 0.50000000527 at zero,
       --  5.3e-9 out, and the FLOAT Graecus.Norm_Cdf carries exactly the
@@ -117,20 +125,20 @@ package body Graecus_Fixed_Tests is
       --  to show is that swapping the arithmetic does not move the
       --  answer, so the float version is the reference here too.
       Assert
-        (abs (Real (Graecus.Fixed.Norm_Cdf (0.0)) - Graecus.Norm_Cdf (0.0))
+        (abs (Val_Of (Graecus.Fixed.Norm_Cdf (0)) - Graecus.Norm_Cdf (0.0))
          <= 8.0 * Lsb,
          "Norm_Cdf (0) must track the float version, got"
-         & Img (Real (Graecus.Fixed.Norm_Cdf (0.0)))
+         & Img (Val_Of (Graecus.Fixed.Norm_Cdf (0)))
          & " against"
          & Img (Graecus.Norm_Cdf (0.0)));
       Assert
-        (Graecus.Fixed.Norm_Cdf (Graecus.Fixed.Sat'Last) = 1.0,
+        (Graecus.Fixed.Norm_Cdf (Graecus.Fixed.Sat'Last) = One,
          "the far right tail must saturate at one");
       Assert
-        (Graecus.Fixed.Norm_Cdf (Graecus.Fixed.Sat'First) = 0.0,
+        (Graecus.Fixed.Norm_Cdf (Graecus.Fixed.Sat'First) = 0,
          "the far left tail must saturate at zero");
       Assert
-        (Graecus.Fixed.Norm_Cdf (-1.0) + Graecus.Fixed.Norm_Cdf (1.0) = 1.0,
+        (Graecus.Fixed.Norm_Cdf (-One) + Graecus.Fixed.Norm_Cdf (One) = One,
          "the CDF must stay symmetric about zero");
    end Test_Norm_Cdf_Tails;
 

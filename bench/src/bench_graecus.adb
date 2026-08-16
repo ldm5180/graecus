@@ -250,7 +250,8 @@ begin
               + Real
                   (Graecus.Fixed.Norm_Cdf
                      (Graecus.Fixed.Sat
-                        (-8.0 + 16.0 * Real (I) / Real (Sweep))));
+                        ((-8.0 + 16.0 * Real (I) / Real (Sweep))
+                         * Real (Graecus.Fixed.Scale))));
          end loop;
       end loop;
       B := Ada.Real_Time.Clock;
@@ -259,7 +260,10 @@ begin
          declare
             X : constant Real := -8.0 + 16.0 * Real (I) / Real (Sweep);
             D : constant Real :=
-              abs (Real (Graecus.Fixed.Norm_Cdf (Graecus.Fixed.Sat (X)))
+              abs (Real
+                     (Graecus.Fixed.Norm_Cdf
+                        (Graecus.Fixed.Sat (X * Real (Graecus.Fixed.Scale))))
+                   / Real (Graecus.Fixed.Scale)
                    - Graecus.Norm_Cdf (X));
          begin
             Worst := Real'Max (Worst, D);
