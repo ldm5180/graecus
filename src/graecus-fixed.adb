@@ -137,13 +137,13 @@ is
    B4 : constant LLI := -2_002_492_124_968;
    B5 : constant LLI := 1_462_652_202_819;
 
-   Rate          : constant LLI := 254_692_962_530;
+   Cdf_Rate      : constant LLI := 254_692_962_530;
    Inv_Sqrt_2_Pi : constant LLI := 438_641_676_113;
 
    function Norm_Cdf (X : Sat) return Unit is
       Ax : constant R_Abs := Clamp (abs X, 0, 40 * Scale);
 
-      Denom : constant LLI := Scale + Mul (Rate, Ax);
+      Denom : constant LLI := Scale + Mul (Cdf_Rate, Ax);
       K     : constant Unit := Div (Scale, Denom);
 
       --  Horner's rule one clamped stage at a time, exactly as the float
@@ -386,5 +386,82 @@ is
          return Halved (Clamp (Mul (Mant, Y4), 0, Scale), K);
       end;
    end Sqrt;
+
+   --  Money times a probability.  Kept apart from Mul because money
+   --  carries twenty bits above the unit interval: one money operand
+   --  and one Unit operand need 60 + 41 bits of product, which is fine,
+   --  while TWO money operands would need 120 and a result this
+   --  representation cannot hold.  Splitting the two cases is how that
+   --  stays a matter of types rather than of vigilance.
+   function Mul_Money (A : Money; B : Unit) return Money
+   is (LLI ((LLLI (A) * LLLI (B) + Half) / LLLI (Scale)));
+
+   --  A saturating divide, and the only way d1 can be computed here.
+   --  The float version bounds the ratio at 3e13 before clamping it to
+   --  the saturation of 40; 3e13 scaled by 2**40 is 3.3e25, which a
+   --  64-bit raw cannot hold at all.  So the clamp has to happen INSIDE
+   --  the 128-bit intermediate, before anything narrows -- the quotient
+   --  is formed wide, limited wide, and only then brought down.
+   function Div_Sat (A, B, Limit : LLI) return LLI
+   is (LLI
+         (LLLI'Max
+            (-LLLI (Limit),
+             LLLI'Min (LLLI (Limit), LLLI (A) * LLLI (Scale) / LLLI (B)))))
+      --  The bound is written as a RANGE, not as abs A: `abs` of
+      --  Long_Long_Integer'First overflows, so a precondition phrased with
+      --  it is itself an unproved check.  gnatprove caught exactly that.
+   with
+     Pre => B > 0 and then Limit > 0 and then A in -(64 * Scale) .. 64 * Scale;
+
+   Sat_Lim : constant LLI := 40 * Scale;
+
+   --  The d1 term.  Two departures from the float original, both forced
+   --  by the representation and both improvements: the log of the ratio
+   --  becomes a difference of logs, and the division saturates in flight
+   --  instead of being bounded and then clamped.
+   function D1 (S, K : Spot; T : Year; V : Vol; R : Rate) return Sat is
+      Root_T : constant Unit :=
+        Clamp (Sqrt (Clamp (T, 0, Scale)), 1_099, Scale);
+
+      --  Floored exactly where the float floors it, at 1e-12 -- which
+      --  on this grid is a single raw unit.
+      Denom : constant LLI := LLI'Max (Mul (V, Root_T), 1);
+
+      V_Sq  : constant LLI := Clamp (Mul (V, V), 0, 25 * Scale);
+      Drift : constant LLI := Mul (Clamp (R + V_Sq / 2, 0, 16 * Scale), T);
+
+      Numer : constant LLI :=
+        Clamp (Log (S) - Log (K) + Drift, -30 * Scale, 30 * Scale);
+   begin
+      return Clamp (Div_Sat (Numer, Denom, Sat_Lim), -Sat_Lim, Sat_Lim);
+   end D1;
+
+   function Price
+     (S, K : Spot; T : Year; V : Vol; R : Rate; Right : Option_Right)
+      return Money
+   is
+      Root_T : constant Unit :=
+        Clamp (Sqrt (Clamp (T, 0, Scale)), 1_099, Scale);
+      D1v    : constant Sat := D1 (S, K, T, V, R);
+      D2v    : constant Sat :=
+        Clamp (D1v - Mul (V, Root_T), -Sat_Lim, Sat_Lim);
+
+      Disc   : constant Unit := Exp (-Mul (R, T));
+      Disc_K : constant Money := Mul_Money (K, Disc);
+
+      Near : constant Money :=
+        (if Right = Call
+         then Mul_Money (S, Norm_Cdf (D1v))
+         else Mul_Money (Disc_K, Norm_Cdf (-D2v)));
+      Far  : constant Money :=
+        (if Right = Call
+         then Mul_Money (Disc_K, Norm_Cdf (D2v))
+         else Mul_Money (S, Norm_Cdf (-D1v)));
+   begin
+      --  Never negative, the same guarantee the float version's Post
+      --  carries -- expressed as the subtraction simply not happening
+      --  rather than as a clamp after it.
+      return (if Near > Far then Near - Far else 0);
+   end Price;
 
 end Graecus.Fixed;

@@ -109,7 +109,22 @@ procedure Bench_Graecus is
       Puts, Calls_M            : Mark_Array;
       A, B                     : Ada.Real_Time.Time;
       Computed, Faint, Clamped : Natural := 0;
+
+      --  The same chain in the spike's representation, so the two
+      --  Prices are timed on identical inputs in one process.
+      type Raw_Strike_Array is array (Strike_Index) of Graecus.Fixed.Spot;
+      Grid_Raw : Raw_Strike_Array;
+      Fx       : constant Real := Real (Graecus.Fixed.Scale);
+      Spot_Raw : constant Graecus.Fixed.Spot := Graecus.Fixed.Spot (Spot * Fx);
+      T_Raw    : constant Graecus.Fixed.Year := Graecus.Fixed.Year (T * Fx);
+      V_Raw    : constant Graecus.Fixed.Vol :=
+        Graecus.Fixed.Vol (True_Vol * Fx);
+      R_Raw    : constant Graecus.Fixed.Rate := Graecus.Fixed.Rate (Rfr * Fx);
+      Worst    : Real := 0.0;
    begin
+      for I in Strike_Index loop
+         Grid_Raw (I) := Graecus.Fixed.Spot (Grid (I) * Fx);
+      end loop;
       Fill_Marks (T, Graecus.Put, Puts);
       Fill_Marks (T, Graecus.Call, Calls_M);
 
@@ -142,6 +157,62 @@ procedure Bench_Graecus is
       end loop;
       B := Ada.Real_Time.Clock;
       Row (Scenario, "delta_of", Calls, A, B);
+
+      --  The whole fixed-point price, over the same chain.
+      A := Ada.Real_Time.Clock;
+      for P in 1 .. Passes loop
+         pragma Unreferenced (P);
+         for I in Strike_Index loop
+            Checksum :=
+              Checksum
+              + Real
+                  (Graecus.Fixed.Price
+                     (Spot_Raw,
+                      Grid_Raw (I),
+                      T_Raw,
+                      V_Raw,
+                      R_Raw,
+                      Graecus.Put))
+              + Real
+                  (Graecus.Fixed.Price
+                     (Spot_Raw,
+                      Grid_Raw (I),
+                      T_Raw,
+                      V_Raw,
+                      R_Raw,
+                      Graecus.Call));
+         end loop;
+      end loop;
+      B := Ada.Real_Time.Clock;
+
+      for I in Strike_Index loop
+         for Right in Graecus.Option_Right loop
+            declare
+               D : constant Real :=
+                 abs (Real
+                        (Graecus.Fixed.Price
+                           (Spot_Raw,
+                            Grid_Raw (I),
+                            T_Raw,
+                            V_Raw,
+                            R_Raw,
+                            Right))
+                      / Fx
+                      - Graecus.Price
+                          (Spot, Grid (I), T, True_Vol, Rfr, Right));
+            begin
+               Worst := Real'Max (Worst, D);
+            end;
+         end loop;
+      end loop;
+
+      Row
+        (Scenario,
+         "price_fixed",
+         Calls,
+         A,
+         B,
+         "worst drift vs float $" & Real'Image (Worst));
 
       --  Implied_Vol -- the expensive one, and the only one the
       --  bisection bound can move.

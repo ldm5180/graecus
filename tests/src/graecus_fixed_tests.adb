@@ -269,11 +269,75 @@ package body Graecus_Fixed_Tests is
          "sqrt (1/4) must land on a half -- the normalisation's own edge");
    end Test_Sqrt;
 
+   --  The whole price, against the float Graecus.Price, over a chain
+   --  shaped like the one the bot actually reads: strikes either side
+   --  of a 5900 index print, both rights, three terms, three vols.
+   procedure Test_Price (T : in out AUnit.Test_Cases.Test_Case'Class) is
+      pragma Unreferenced (T);
+      Rfr      : constant Real := 0.045;
+      Under    : constant Real := 5_900.0;
+      Worst    : Real := 0.0;
+      Worst_At : Real := 0.0;
+
+      type Real_List is array (Positive range <>) of Real;
+      Terms : constant Real_List :=
+        [4.0 / 365.25, 7.0 / 365.25, 30.0 / 365.25];
+      Vols  : constant Real_List := [0.08, 0.18, 0.45];
+
+      procedure Check (Strike, Term, Vol : Real; Right : Graecus.Option_Right)
+      is
+         F : constant Real :=
+           Val_Of
+             (Graecus.Fixed.Price
+                (Graecus.Fixed.Spot (Raw_Of (Under)),
+                 Graecus.Fixed.Spot (Raw_Of (Strike)),
+                 Graecus.Fixed.Year (Raw_Of (Term)),
+                 Graecus.Fixed.Vol (Raw_Of (Vol)),
+                 Graecus.Fixed.Rate (Raw_Of (Rfr)),
+                 Right));
+         E : constant Real :=
+           Graecus.Price (Under, Strike, Term, Vol, Rfr, Right);
+         D : constant Real := abs (F - E);
+      begin
+         if D > Worst then
+            Worst := D;
+            Worst_At := Strike;
+         end if;
+      end Check;
+   begin
+      for Term of Terms loop
+         for Vol of Vols loop
+            for I in 0 .. 400 loop
+               declare
+                  Strike : constant Real := 4_900.0 + 5.0 * Real (I);
+               begin
+                  Check (Strike, Term, Vol, Graecus.Call);
+                  Check (Strike, Term, Vol, Graecus.Put);
+               end;
+            end loop;
+         end loop;
+      end loop;
+
+      --  The tolerance is in DOLLARS, because dollars is the unit a
+      --  price is compared and ordered in.  A tenth of a cent is well
+      --  under the $0.05 tick an SPX order actually rests on.
+      Assert
+        (Worst <= 0.001,
+         "fixed Price drifts from the float one by $"
+         & Img (Worst)
+         & " at strike"
+         & Img (Worst_At));
+   end Test_Price;
+
    overriding
    procedure Register_Tests (T : in out Test) is
    begin
       Register_Routine
         (T, Test_Exp'Access, "fixed-point exp matches the runtime's");
+      Register_Routine
+        (T,
+         Test_Price'Access,
+         "fixed-point Price matches the float one across a chain");
       Register_Routine
         (T,
          Test_Sqrt'Access,

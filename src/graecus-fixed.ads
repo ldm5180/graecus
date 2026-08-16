@@ -92,4 +92,24 @@ is
 
    function Sqrt (X : Sqrt_Arg) return Unit;
 
+   --  The Black-Scholes price, whole, over the same envelope as the
+   --  float Graecus.Price: Spot_Range, Year_Fraction, Vol_Range,
+   --  Rate_Range.  This is the measurement that matters -- the three
+   --  primitives above disagree with each other about whether fixed
+   --  point is faster, so only the mix settles it.
+   subtype Spot is Raw range Scale / 100 .. 1_000_000 * Scale;
+   subtype Year is Raw range 109_951 .. Scale / 5;
+   subtype Vol is Raw range 549_755_814 .. 5 * Scale;
+   subtype Rate is Raw range 0 .. Scale / 4;
+
+   --  Money needs twenty bits above the unit interval, which is why it
+   --  cannot go through the same multiply as everything else: two
+   --  money operands would need a product this representation has no
+   --  room for.  Only one side of any product here is ever money.
+   subtype Money is Raw range 0 .. 1_000_000 * Scale;
+
+   function Price
+     (S, K : Spot; T : Year; V : Vol; R : Rate; Right : Option_Right)
+      return Money;
+
 end Graecus.Fixed;
