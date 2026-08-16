@@ -59,7 +59,17 @@ bench: bench-build
 ## bench-build Compile the benchmark without running it
 #  bench/bench.gpr is in no other build: `alr build` never sees it, and
 #  the test suite does not link it.
+#
+#  `alr build --release` FIRST, and not as a nicety: bench.gpr links
+#  graecus.gpr, which compiles with whatever profile the generated
+#  config/graecus_config.gpr currently names -- and alr REWRITES that
+#  file on every `alr build`, `alr build --validation`, and so on.  A
+#  `make prove` or a validation build between two bench runs therefore
+#  silently moves the library from -O3 to -Og, and the second run reads
+#  2.6x slower for no reason in the source.  Pinning it here is what
+#  makes two runs comparable at all.
 bench-build:
+	alr build --release
 	alr exec -- gprbuild -p -j0 -XMODE=release -P bench/bench.gpr
 
 ## clean       Remove all build artifacts
