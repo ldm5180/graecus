@@ -33,6 +33,18 @@ is
    subtype Abs_Sat_Real is Real range 0.0 .. Cdf_Saturation;
    subtype Sat_Square is Real range 0.0 .. 1_600.0;
 
+   --  sqrt (T) floored away from zero so the vol-time product is total.
+   subtype Root_Time is Real range 1.0e-9 .. 1.0;
+
+   --  V * sqrt (T), floored: V <= 5.0 and sqrt (T) <= 1.0.
+   subtype Vol_Time is Real range 1.0e-12 .. Max_Vol;
+
+   --  The d1 numerator, clamped to its mathematical bound.
+   subtype Numer_Range is Real range -30.0 .. 30.0;
+
+   --  |Numer| <= 30 over a denominator floored at 1.0e-12.
+   subtype Ratio_Range is Real range -3.0e13 .. 3.0e13;
+
    --  The trusted numerics boundary: the GNAT runtime's elementary
    --  functions carry no usable Posts, so the proof would treat every
    --  Exp as possibly 1.8e308.  These wrappers declare the bounds the
@@ -120,6 +132,17 @@ is
    --  (its true floor here is ~1.6e-7) so the division is total, and
    --  the result saturates like the CDF (past +/-40 the price is
    --  pinned anyway).
+   --
+   --  The Post stays, and the result stays a bare Real: replacing it
+   --  with a Sat_Real return subtype was MEASURED and is worse both
+   --  ways.  A body-local function with no contract is one gnatprove
+   --  INLINES, so every call site re-proves this whole body in its own
+   --  context -- which costs more than it buys and does not discharge
+   --  at all inside Implied_Vol's vega block.  Carrying both the Post
+   --  and the subtype proves, but adds a return range check and a
+   --  postcondition that together cost more than the intermediates
+   --  below save.  The bounds belong on the intermediates here, not on
+   --  the result.
    function D1
      (S : Spot_Range;
       K : Spot_Range;
@@ -128,18 +151,21 @@ is
       R : Rate_Range) return Real
    with Post => D1'Result in -Cdf_Saturation .. Cdf_Saturation
    is
-      Sqrt_T : constant Real := Real'Max (Sqrt_B (T), 1.0e-9);
-      Denom  : constant Real := Real'Max (V * Sqrt_T, 1.0e-12);
+      Sqrt_T : constant Root_Time := Real'Max (Sqrt_B (T), 1.0e-9);
+      Denom  : constant Vol_Time := Real'Max (V * Sqrt_T, 1.0e-12);
+
+      --  V <= 5.0, so the variance term is bounded before it is scaled.
+      V_Sq : constant Real range 0.0 .. 25.0 := V * V;
 
       --  The drift and log terms are clamped to their mathematical
       --  bounds (|ln (S/K)| <= 25 by Log_B's Post; the drift tops out
       --  at (0.25 + 12.5) * 0.2) so the division's magnitude is
       --  provably finite before the saturation clamp.
-      Numer : constant Real :=
+      Numer : constant Numer_Range :=
         Real'Min
-          (Real'Max (Log_B (S / K) + (R + 0.5 * V * V) * T, -30.0), 30.0);
+          (Real'Max (Log_B (S / K) + (R + 0.5 * V_Sq) * T, -30.0), 30.0);
 
-      Raw : constant Real := Numer / Denom;
+      Raw : constant Ratio_Range := Numer / Denom;
    begin
       return Real'Min (Real'Max (Raw, -Cdf_Saturation), Cdf_Saturation);
    end D1;
