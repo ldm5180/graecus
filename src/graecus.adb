@@ -178,14 +178,26 @@ is
       R     : Rate_Range;
       Right : Option_Right) return Real
    is
-      Sqrt_T : constant Real := Real'Max (Sqrt_B (T), 1.0e-9);
-      D1v    : constant Real := D1 (S, K, T, V, R);
-      D2v    : constant Real := D1v - V * Sqrt_T;
-      Disc   : constant Real := Exp_B (-(R * T));
-      Raw    : constant Real :=
+      Sqrt_T : constant Root_Time := Real'Max (Sqrt_B (T), 1.0e-9);
+      D1v    : constant Sat_Real := D1 (S, K, T, V, R);
+
+      D2v  : constant Real := D1v - V * Sqrt_T;
+      Disc : constant Unit_Real := Exp_B (-(R * T));
+
+      --  The discounted strike: both legs below are (bounded x CDF).
+      Disc_K : constant Real range 0.0 .. 1.0e6 := K * Disc;
+
+      --  Raw stays unbounded on purpose: a declared range here was
+      --  MEASURED as the most expensive thing in the file.  The tight
+      --  +/-1.0e6 does not discharge (the solver will not see that one
+      --  leg is near zero exactly when the other is near its maximum),
+      --  and the widened +/-2.0e6 that does discharge costs more than
+      --  everything the rest of this subprogram saves.  Disc_K below is
+      --  what actually pays: it bounds a leg BEFORE the subtraction.
+      Raw : constant Real :=
         (if Right = Call
-         then S * Norm_Cdf (D1v) - K * Disc * Norm_Cdf (D2v)
-         else K * Disc * Norm_Cdf (-D2v) - S * Norm_Cdf (-D1v));
+         then S * Norm_Cdf (D1v) - Disc_K * Norm_Cdf (D2v)
+         else Disc_K * Norm_Cdf (-D2v) - S * Norm_Cdf (-D1v));
    begin
       return Real'Max (Raw, 0.0);
    end Price;
