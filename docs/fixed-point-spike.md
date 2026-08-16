@@ -175,3 +175,21 @@ make prove
 `bench/src/bench_graecus.adb` prints every number in this document.
 Flip `Frac` in `src/graecus-fixed.ads` to reproduce the 2**(-25) end of
 the accuracy/speed curve.
+
+**Profile caveat, and it matters.**  These numbers were taken before
+`make bench-build` pinned `alr build --release`.  bench.gpr links
+graecus.gpr, which compiles with whatever profile the GENERATED
+`config/graecus_config.gpr` names, and alr rewrites that file on every
+`alr build` / `alr build --validation` -- so a `make prove` between two
+runs silently moved the library between -O3 and -Og.  Absolute figures
+above are therefore the development profile (-O3 but WITH -gnata, so
+contracts are checked at run time); a release build of the same code is
+about half of them.
+
+What survives unaffected is every float-vs-fixed RATIO, because both
+sides were always compiled in the same profile and timed in the same
+process.  What does NOT survive cleanly is the per-primitive comparison
+against libm: `log` and `sqrt` there are optimised C measured against
+contract-checked Ada, so fixed point's disadvantage on those two is
+overstated by an unknown amount.  The verdict rests on the whole-Price
+comparison, which is same-profile and in-process, so it stands.
