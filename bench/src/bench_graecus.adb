@@ -3,6 +3,7 @@ with Ada.Real_Time;
 with Ada.Text_IO;
 
 with Graecus;
+with Graecus.Fixed;
 
 --  Times graecus's four public entry points over a synthetic SPXW chain
 --  and prints one CSV row per measurement.
@@ -229,6 +230,49 @@ begin
       end loop;
       B := Ada.Real_Time.Clock;
       Row ("sweep", "norm_cdf", Calls, A, B, "x in [-8, 8]");
+   end;
+
+   --  The same sweep through the fixed-point spike, so the two are timed
+   --  on identical inputs in one process, and the worst disagreement
+   --  between them is reported next to the cost of getting it.
+   declare
+      Sweep : constant := 16_000;
+      Calls : constant Long_Long_Integer := Long_Long_Integer (Passes) * Sweep;
+      A, B  : Ada.Real_Time.Time;
+      Worst : Real := 0.0;
+   begin
+      A := Ada.Real_Time.Clock;
+      for P in 1 .. Passes loop
+         pragma Unreferenced (P);
+         for I in 1 .. Sweep loop
+            Checksum :=
+              Checksum
+              + Real
+                  (Graecus.Fixed.Norm_Cdf
+                     (Graecus.Fixed.Sat
+                        (-8.0 + 16.0 * Real (I) / Real (Sweep))));
+         end loop;
+      end loop;
+      B := Ada.Real_Time.Clock;
+
+      for I in 1 .. Sweep loop
+         declare
+            X : constant Real := -8.0 + 16.0 * Real (I) / Real (Sweep);
+            D : constant Real :=
+              abs (Real (Graecus.Fixed.Norm_Cdf (Graecus.Fixed.Sat (X)))
+                   - Graecus.Norm_Cdf (X));
+         begin
+            Worst := Real'Max (Worst, D);
+         end;
+      end loop;
+
+      Row
+        ("sweep",
+         "norm_cdf_fixed",
+         Calls,
+         A,
+         B,
+         "worst drift vs float" & Real'Image (Worst));
    end;
 
    Bench_Scenario ("0dte", Zero_Dte, Passes);

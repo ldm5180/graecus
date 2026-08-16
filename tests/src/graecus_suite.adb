@@ -1,5 +1,6 @@
 with AUnit.Test_Cases;
 
+with Graecus_Fixed_Tests;
 with Graecus_Tests;
 
 package body Graecus_Suite is
@@ -14,6 +15,7 @@ package body Graecus_Suite is
       end Add;
    begin
       Add (new Graecus_Tests.Test);
+      Add (new Graecus_Fixed_Tests.Test);
       return Result;
    end Suite;
 
