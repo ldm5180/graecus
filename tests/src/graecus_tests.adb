@@ -165,6 +165,47 @@ package body Graecus_Tests is
         (abs (Dc - Dp - 1.0) < 1.0e-9, "call delta - put delta = 1 (same d1)");
    end Test_Properties;
 
+   --  Price then invert: the bisection must land back on the vol it was
+   --  given.  This is what bounds Implied_Vol's early exit -- the loop
+   --  stops on a bracket width, so loosening that width past ~2e-8 shows
+   --  up here as a vol the round trip no longer recovers.  Strikes stay
+   --  near the money and vols in the living range, where vega is healthy
+   --  and the inversion is well conditioned; the ill-conditioned rows are
+   --  the fixture's job (they come back Faint or Clamped).
+   procedure Test_Round_Trip (T : in out AUnit.Test_Cases.Test_Case'Class) is
+      pragma Unreferenced (T);
+      use Graecus;
+      S       : constant Real := 7_500.0;
+      Tm      : constant Real := 4.0 / 365.25;
+      Checked : Natural := 0;
+   begin
+      for Right in Option_Right loop
+         for Ks in -20 .. 20 loop
+            for Vs in 1 .. 8 loop
+               declare
+                  K       : constant Real := S + Real (Ks) * 5.0;
+                  Ref     : constant Real := 0.10 + Real (Vs) * 0.04;
+                  Premium : constant Real := Price (S, K, Tm, Ref, Rfr, Right);
+                  Iv      : Vol_Range;
+                  Q       : Quality;
+               begin
+                  Implied_Vol (Premium, S, K, Tm, Rfr, Right, Iv, Q);
+                  if Q = Computed then
+                     Checked := Checked + 1;
+                     Assert
+                       (abs (Iv - Ref) < 1.0e-8,
+                        "round trip recovers the vol it priced:"
+                        & Real'Image (Ref)
+                        & " ->"
+                        & Real'Image (Iv));
+                  end if;
+               end;
+            end loop;
+         end loop;
+      end loop;
+      Assert (Checked > 100, "the grid exercised a real number of rows");
+   end Test_Round_Trip;
+
    --  The EMA weight an IV-skew signal rides: 1 - exp(-X), pinned
    --  at the classic X = 1 point and saturated at both ends.
    procedure Test_Decay (T : in out AUnit.Test_Cases.Test_Case'Class) is
@@ -187,6 +228,10 @@ package body Graecus_Tests is
          "36 fixture rows within 2e-3 IV / 0.005 delta");
       Register_Routine
         (T, Test_Properties'Access, "parity, bounds, signed deltas");
+      Register_Routine
+        (T,
+         Test_Round_Trip'Access,
+         "price then invert recovers the vol, bounding the early exit");
       Register_Routine (T, Test_Decay'Access, "the EMA decay weight");
    end Register_Tests;
 

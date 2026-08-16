@@ -230,6 +230,15 @@ is
 
       Lo : Vol_Range := Min_Vol;
       Hi : Vol_Range := Max_Vol;
+
+      --  Stop bisecting once the bracket is narrower than anything a
+      --  consumer can represent.  Every caller rounds this vol into an
+      --  integer -- deltas into 1/1000ths, skew into ppm -- so a bracket
+      --  three orders of magnitude below the finest of those quanta has
+      --  already settled every digit anyone reads.  Running on to the
+      --  float resolution floor instead costs a full Price per halving,
+      --  and a Price is five transcendental calls.
+      Vol_Resolution : constant Real := 1.0e-9;
    begin
       --  No time value (or an absurd one): the premium sits outside the
       --  invertible band -- classify, never chase.
@@ -244,11 +253,13 @@ is
          return;
       end if;
 
-      --  Price is monotone increasing in vol, so plain bisection: 60
-      --  halvings of [Min_Vol, Max_Vol] land far past Long_Float's
-      --  resolution.
+      --  Price is monotone increasing in vol, so plain bisection.  The 60
+      --  halvings remain the bound (they still outrun Long_Float's
+      --  resolution, so termination and the bracket invariant are
+      --  unchanged); Vol_Resolution is what actually ends the loop.
       for Step in 1 .. 60 loop
          pragma Loop_Invariant (Lo < Hi);
+         exit when Hi - Lo <= Vol_Resolution;
          declare
             Mid : constant Real := Lo + (Hi - Lo) / 2.0;
          begin
