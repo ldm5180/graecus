@@ -5,7 +5,7 @@
 
 EX := -P example/example.gpr
 
-.PHONY: all build test prove format example release debug run clean help
+.PHONY: all build test prove format example release debug run bench bench-build clean help
 
 all: build
 
@@ -31,6 +31,7 @@ format:
 	alr exec -- gnatformat -P tests/test_graecus.gpr --check $$(git ls-files 'tests/src/*.ad[sb]')
 	alr exec -- gnatformat -P example/example.gpr --check $$(git ls-files 'example/src/*.ad[sb]')
 	alr exec -- gnatformat -P proof/proof.gpr --check $$(git ls-files 'proof/src/*.ad[sb]')
+	alr exec -- gnatformat -P bench/bench.gpr --check $$(git ls-files 'bench/src/*.ad[sb]')
 
 ## example     Build the example both ways
 example: release debug
@@ -46,6 +47,20 @@ debug:
 ## run         Build and run the release example
 run: release
 	./example/bin/release/iv_of_premium
+
+## bench       Build and run the CPU micro-benchmark (-O3, offline)
+#  Run it TWICE and take the second: the first after a build reads high.
+#  Absolute numbers only compare within one sitting on one box -- what
+#  survives across sittings is the ratio between two runs of this same
+#  harness.  BENCH_PASSES overrides the pass count (default 40).
+bench: bench-build
+	./bench/bin/release/bench_graecus $(BENCH_PASSES)
+
+## bench-build Compile the benchmark without running it
+#  bench/bench.gpr is in no other build: `alr build` never sees it, and
+#  the test suite does not link it.
+bench-build:
+	alr exec -- gprbuild -p -j0 -XMODE=release -P bench/bench.gpr
 
 ## clean       Remove all build artifacts
 clean:
