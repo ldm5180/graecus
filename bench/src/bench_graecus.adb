@@ -348,6 +348,72 @@ begin
          "worst drift vs runtime" & Real'Image (Worst));
    end;
 
+   --  sqrt: one hardware instruction on the float side, so this is the
+   --  least favourable comparison in the crate.  Swept over
+   --  Year_Fraction, geometrically, points precomputed.
+   declare
+      package Elf renames Ada.Numerics.Long_Elementary_Functions;
+      Sweep : constant := 16_000;
+      Calls : constant Long_Long_Integer := Long_Long_Integer (Passes) * Sweep;
+      A, B  : Ada.Real_Time.Time;
+      Worst : Real := 0.0;
+
+      type Point_Array is array (1 .. Sweep) of Real;
+      type Raw_Array is array (1 .. Sweep) of Graecus.Fixed.Sqrt_Arg;
+      Point     : Point_Array;
+      Point_Raw : Raw_Array;
+   begin
+      for I in 1 .. Sweep loop
+         Point (I) :=
+           Real'Min
+             (1.0,
+              Real'Max
+                (1.0e-7,
+                 1.0e-7
+                 * Elf.Exp (Elf.Log (1.0e7) * Real (I) / Real (Sweep))));
+         Point_Raw (I) :=
+           Graecus.Fixed.Sqrt_Arg (Point (I) * Real (Graecus.Fixed.Scale));
+      end loop;
+
+      A := Ada.Real_Time.Clock;
+      for P in 1 .. Passes loop
+         pragma Unreferenced (P);
+         for I in 1 .. Sweep loop
+            Checksum := Checksum + Elf.Sqrt (Point (I));
+         end loop;
+      end loop;
+      B := Ada.Real_Time.Clock;
+      Row ("sweep", "sqrt", Calls, A, B, "x in [1e-7, 1]");
+
+      A := Ada.Real_Time.Clock;
+      for P in 1 .. Passes loop
+         pragma Unreferenced (P);
+         for I in 1 .. Sweep loop
+            Checksum := Checksum + Real (Graecus.Fixed.Sqrt (Point_Raw (I)));
+         end loop;
+      end loop;
+      B := Ada.Real_Time.Clock;
+
+      for I in 1 .. Sweep loop
+         declare
+            D : constant Real :=
+              abs (Real (Graecus.Fixed.Sqrt (Point_Raw (I)))
+                   / Real (Graecus.Fixed.Scale)
+                   - Elf.Sqrt (Point (I)));
+         begin
+            Worst := Real'Max (Worst, D);
+         end;
+      end loop;
+
+      Row
+        ("sweep",
+         "sqrt_fixed",
+         Calls,
+         A,
+         B,
+         "worst drift vs runtime" & Real'Image (Worst));
+   end;
+
    Bench_Scenario ("0dte", Zero_Dte, Passes);
    Bench_Scenario ("week", Week_Dte, Passes);
 

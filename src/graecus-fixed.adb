@@ -292,4 +292,99 @@ is
       end;
    end Log;
 
+   Quarter : constant LLI := Scale / 4;
+   Three   : constant LLI := 3 * Scale;
+
+   --  1 / sqrt (m) at the midpoint of each sixteenth of [0.25, 1), the
+   --  seed for the Newton iteration below.  Worst relative error 4.38%,
+   --  which the recurrence e <- 1.5 * e**2 takes to 2.9e-3, 1.2e-5,
+   --  2.3e-10, 8.1e-20 -- so four steps, because three would stop at
+   --  2.3e-10 and the grid here is 9.1e-13.
+   --!format off
+   Rsq_T : constant array (0 .. 15) of LLI :=
+     [2_102_668_406_102, 1_942_731_951_877, 1_814_495_445_435,
+      1_708_704_159_290, 1_619_491_994_583, 1_542_936_784_740,
+      1_476_303_458_016, 1_417_618_750_200, 1_365_418_444_670,
+      1_318_590_091_900, 1_276_271_316_274, 1_237_781_890_729,
+      1_202_577_080_556, 1_170_214_808_625, 1_140_332_049_941,
+      1_112_627_538_436];
+   --!format on
+
+   --  1 / sqrt (M) for M in [0.25, 1), so the result is in [1, 2].
+   subtype Rsq_Range is LLI range Scale .. 2 * Scale;
+
+   --  One Newton step, y <- y * (3 - M * y**2) / 2.  Written for the
+   --  RECIPROCAL root on purpose: the direct iteration needs a division
+   --  per step, and a division is the one thing that is expensive in
+   --  both representations.  This form is multiplies only.
+   function Rsq_Step (Y : Rsq_Range; M : Unit) return Rsq_Range is
+      Y2 : constant LLI := Clamp (Mul (Y, Y), 0, 4 * Scale);
+
+      --  Bounded by THREE, not by two.  The seed carries up to 4.4% of
+      --  error, so M * y**2 can fall to about 0.91 and the correction
+      --  rise to 2.09; clamping it at two silently truncated the first
+      --  iteration and left ~2e-2 of drift just above 0.25.
+      Correction : constant LLI := Clamp (Three - Mul (M, Y2), 0, Three);
+   begin
+      return Clamp (Mul (Y, Correction / 2), Scale, 2 * Scale);
+   end Rsq_Step;
+
+   function Sqrt (X : Sqrt_Arg) return Unit is
+      M : Raw := X;
+      K : Natural := 0;
+   begin
+      if X = 0 then
+         return 0;
+      end if;
+
+      --  Normalise into [0.25, 1) by EVEN powers of two -- the root
+      --  halves the exponent, so the shift has to come in pairs of bits
+      --  or it cannot be undone by a shift at the end.
+      if M < Quarter / 4**16 then
+         M := M * 4**16;
+         K := K + 16;
+      end if;
+      if M < Quarter / 4**8 then
+         M := M * 4**8;
+         K := K + 8;
+      end if;
+      if M < Quarter / 4**4 then
+         M := M * 4**4;
+         K := K + 4;
+      end if;
+      if M < Quarter / 4**2 then
+         M := M * 4**2;
+         K := K + 2;
+      end if;
+      if M < Quarter / 4 then
+         M := M * 4;
+         K := K + 1;
+      end if;
+
+      --  The halving chain above only establishes M >= Quarter / 4:
+      --  each step s leaves M >= Quarter / 4**s, so the last one lands a
+      --  level short.  This is the step that closes it, and without it
+      --  every exact power-of-four boundary -- 1/16 was the one the
+      --  test caught -- comes back un-normalised and wrong.
+      if M < Quarter then
+         M := M * 4;
+         K := K + 1;
+      end if;
+
+      declare
+         Mant : constant Unit := Clamp (M, Quarter, Scale);
+         J    : constant Natural :=
+           Natural (Clamp ((Mant - Quarter) * 16 / (3 * Quarter), 0, 15));
+
+         Y0 : constant Rsq_Range := Clamp (Rsq_T (J), Scale, 2 * Scale);
+         Y1 : constant Rsq_Range := Rsq_Step (Y0, Mant);
+         Y2 : constant Rsq_Range := Rsq_Step (Y1, Mant);
+         Y3 : constant Rsq_Range := Rsq_Step (Y2, Mant);
+         Y4 : constant Rsq_Range := Rsq_Step (Y3, Mant);
+      begin
+         --  sqrt (m) = m * (1 / sqrt (m)), then undo the even shift.
+         return Halved (Clamp (Mul (Mant, Y4), 0, Scale), K);
+      end;
+   end Sqrt;
+
 end Graecus.Fixed;

@@ -82,4 +82,14 @@ is
 
    function Log (X : Log_Arg) return Log_Result;
 
+   --  The square root over [0, 1], the float Sqrt_B's exact domain (it
+   --  is only ever handed a Year_Fraction, at most 0.2).
+   --
+   --  This is the least favourable comparison in the crate: on the
+   --  float side sqrt is ONE hardware instruction, so there is no
+   --  library call to beat and nothing to be cleverer than.
+   subtype Sqrt_Arg is Raw range 0 .. Scale;
+
+   function Sqrt (X : Sqrt_Arg) return Unit;
+
 end Graecus.Fixed;

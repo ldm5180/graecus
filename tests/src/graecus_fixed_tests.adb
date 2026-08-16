@@ -211,11 +211,73 @@ package body Graecus_Fixed_Tests is
       end;
    end Test_Log;
 
+   --  sqrt over Year_Fraction, the only thing the float Sqrt_B is ever
+   --  handed.  Swept geometrically for the same reason log is: the
+   --  normalisation works in octaves, so a linear sweep would leave
+   --  almost all of them untested.
+   procedure Test_Sqrt (T : in out AUnit.Test_Cases.Test_Case'Class) is
+      pragma Unreferenced (T);
+      Steps    : constant := 8_000;
+      Worst    : Real := 0.0;
+      Worst_At : Real := 0.0;
+   begin
+      for I in 0 .. Steps loop
+         declare
+            --  1e-7 up to 1.0, the Sqrt_B domain from its floor up.
+            X : constant Real :=
+              Real'Min
+                (1.0,
+                 Real'Max
+                   (1.0e-7,
+                    1.0e-7
+                    * Elf.Exp (Elf.Log (1.0e7) * Real (I) / Real (Steps))));
+            F : constant Real := Val_Of (Graecus.Fixed.Sqrt (Raw_Of (X)));
+            E : constant Real := Elf.Sqrt (X);
+            D : constant Real := abs (F - E);
+
+            --  What the INPUT's own quantisation already costs: half an
+            --  LSB of x, magnified by d(sqrt)/dx = 1 / (2 sqrt x).  At
+            --  the bottom of Year_Fraction this dominates completely --
+            --  x = 1.1e-7 is only ~123_000 raw, seventeen significant
+            --  bits -- so a flat tolerance here would be measuring the
+            --  representation's dynamic range, not the algorithm.
+            Floor_Err : constant Real := 0.5 * Lsb / (2.0 * E) + Lsb;
+         begin
+            if D / Floor_Err > Worst then
+               Worst := D / Floor_Err;
+               Worst_At := X;
+            end if;
+         end;
+      end loop;
+
+      Assert
+        (Worst <= 3.0,
+         "fixed sqrt exceeds the input's own quantisation limit by"
+         & Img (Worst)
+         & "x at x ="
+         & Img (Worst_At));
+
+      Assert (Graecus.Fixed.Sqrt (0) = 0, "sqrt (0) must be exactly zero");
+      Assert
+        (abs (Val_Of (Graecus.Fixed.Sqrt (Graecus.Fixed.Scale)) - 1.0)
+         <= 4.0 * Lsb,
+         "sqrt (1) must land on one, got"
+         & Img (Val_Of (Graecus.Fixed.Sqrt (Graecus.Fixed.Scale))));
+      Assert
+        (abs (Val_Of (Graecus.Fixed.Sqrt (Graecus.Fixed.Scale / 4)) - 0.5)
+         <= 4.0 * Lsb,
+         "sqrt (1/4) must land on a half -- the normalisation's own edge");
+   end Test_Sqrt;
+
    overriding
    procedure Register_Tests (T : in out Test) is
    begin
       Register_Routine
         (T, Test_Exp'Access, "fixed-point exp matches the runtime's");
+      Register_Routine
+        (T,
+         Test_Sqrt'Access,
+         "fixed-point sqrt matches the runtime's over Year_Fraction");
       Register_Routine
         (T,
          Test_Log'Access,
