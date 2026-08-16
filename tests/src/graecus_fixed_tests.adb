@@ -142,11 +142,84 @@ package body Graecus_Fixed_Tests is
          "the CDF must stay symmetric about zero");
    end Test_Norm_Cdf_Tails;
 
+   --  log over Spot_Range, swept GEOMETRICALLY -- a linear sweep would
+   --  spend almost every sample in the top octave and never exercise
+   --  the normalisation that finds the octave in the first place.
+   procedure Test_Log (T : in out AUnit.Test_Cases.Test_Case'Class) is
+      pragma Unreferenced (T);
+      Steps    : constant := 8_000;
+      Worst    : Real := 0.0;
+      Worst_At : Real := 0.0;
+   begin
+      for I in 0 .. Steps loop
+         declare
+            --  0.01 up to 1e6, eight decades, evenly in the exponent.
+            --  Clamped because the endpoints are reconstructed through
+            --  exp/log and land a hair outside the domain.
+            X : constant Real :=
+              Real'Min
+                (1.0e6,
+                 Real'Max
+                   (0.01,
+                    0.01
+                    * Elf.Exp (Elf.Log (1.0e8) * Real (I) / Real (Steps))));
+            F : constant Real := Val_Of (Graecus.Fixed.Log (Raw_Of (X)));
+            E : constant Real := Elf.Log (X);
+            D : constant Real := abs (F - E);
+         begin
+            if D > Worst then
+               Worst := D;
+               Worst_At := X;
+            end if;
+         end;
+      end loop;
+
+      Assert
+        (Worst <= 1.0e-10,
+         "fixed log drifts from the runtime's by"
+         & Img (Worst)
+         & " at x ="
+         & Img (Worst_At));
+
+      --  The exact points: ln 1 is zero, and the octave boundaries are
+      --  where the normalisation hands over between exponents.
+      Assert
+        (Graecus.Fixed.Log (Graecus.Fixed.Scale) = 0,
+         "log (1) must be exactly zero");
+      Assert
+        (abs (Val_Of (Graecus.Fixed.Log (2 * Graecus.Fixed.Scale))
+              - Elf.Log (2.0))
+         <= 4.0 * Lsb,
+         "log (2) must land on ln 2");
+
+      --  The whole point of the domain: D1 wants log (S / K), whose
+      --  argument would overflow a 64-bit raw.  log (S) - log (K) is
+      --  the same number and stays inside Spot_Range.
+      declare
+         S     : constant Real := 5_900.0;
+         K     : constant Real := 5_860.0;
+         Split : constant Real :=
+           Val_Of (Graecus.Fixed.Log (Raw_Of (S)))
+           - Val_Of (Graecus.Fixed.Log (Raw_Of (K)));
+      begin
+         Assert
+           (abs (Split - Elf.Log (S / K)) <= 1.0e-10,
+            "log (S) - log (K) must reproduce log (S / K), got"
+            & Img (Split)
+            & " against"
+            & Img (Elf.Log (S / K)));
+      end;
+   end Test_Log;
+
    overriding
    procedure Register_Tests (T : in out Test) is
    begin
       Register_Routine
         (T, Test_Exp'Access, "fixed-point exp matches the runtime's");
+      Register_Routine
+        (T,
+         Test_Log'Access,
+         "fixed-point log matches the runtime's across eight decades");
       Register_Routine
         (T,
          Test_Norm_Cdf'Access,

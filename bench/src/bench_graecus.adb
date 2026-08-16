@@ -1,4 +1,5 @@
 with Ada.Command_Line;
+with Ada.Numerics.Long_Elementary_Functions;
 with Ada.Real_Time;
 with Ada.Text_IO;
 
@@ -277,6 +278,74 @@ begin
          A,
          B,
          "worst drift vs float" & Real'Image (Worst));
+   end;
+
+   --  log: the runtime's against the spike's, over Spot_Range, swept
+   --  geometrically so every octave gets the same number of samples and
+   --  the fixed version's octave-finding is actually exercised.
+   declare
+      package Elf renames Ada.Numerics.Long_Elementary_Functions;
+      Sweep : constant := 16_000;
+      Calls : constant Long_Long_Integer := Long_Long_Integer (Passes) * Sweep;
+      A, B  : Ada.Real_Time.Time;
+      Worst : Real := 0.0;
+
+      --  Precomputed: building the sweep costs an exp and a log, and
+      --  leaving that inside the timed loops would land on BOTH sides
+      --  and quietly compress the ratio being measured.
+      type Point_Array is array (1 .. Sweep) of Real;
+      type Raw_Array is array (1 .. Sweep) of Graecus.Fixed.Log_Arg;
+      Point     : Point_Array;
+      Point_Raw : Raw_Array;
+   begin
+      for I in 1 .. Sweep loop
+         Point (I) :=
+           Real'Min
+             (1.0e6,
+              Real'Max
+                (0.01,
+                 0.01 * Elf.Exp (Elf.Log (1.0e8) * Real (I) / Real (Sweep))));
+         Point_Raw (I) :=
+           Graecus.Fixed.Log_Arg (Point (I) * Real (Graecus.Fixed.Scale));
+      end loop;
+
+      A := Ada.Real_Time.Clock;
+      for P in 1 .. Passes loop
+         pragma Unreferenced (P);
+         for I in 1 .. Sweep loop
+            Checksum := Checksum + Elf.Log (Point (I));
+         end loop;
+      end loop;
+      B := Ada.Real_Time.Clock;
+      Row ("sweep", "log", Calls, A, B, "x in [0.01, 1e6]");
+
+      A := Ada.Real_Time.Clock;
+      for P in 1 .. Passes loop
+         pragma Unreferenced (P);
+         for I in 1 .. Sweep loop
+            Checksum := Checksum + Real (Graecus.Fixed.Log (Point_Raw (I)));
+         end loop;
+      end loop;
+      B := Ada.Real_Time.Clock;
+
+      for I in 1 .. Sweep loop
+         declare
+            D : constant Real :=
+              abs (Real (Graecus.Fixed.Log (Point_Raw (I)))
+                   / Real (Graecus.Fixed.Scale)
+                   - Elf.Log (Point (I)));
+         begin
+            Worst := Real'Max (Worst, D);
+         end;
+      end loop;
+
+      Row
+        ("sweep",
+         "log_fixed",
+         Calls,
+         A,
+         B,
+         "worst drift vs runtime" & Real'Image (Worst));
    end;
 
    Bench_Scenario ("0dte", Zero_Dte, Passes);

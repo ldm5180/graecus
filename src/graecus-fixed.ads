@@ -66,4 +66,20 @@ is
    --  float Graecus.Norm_Cdf, so the two are comparable line by line.
    function Norm_Cdf (X : Sat) return Unit;
 
+   --  The natural log, over Spot_Range -- 0.01 to 1e6, the domain a
+   --  strike or a spot lives in.
+   --
+   --  NOT over the float version's domain, and that is the point.
+   --  Graecus's D1 computes Log_B (S / K), whose argument spans 1e-8 to
+   --  1e8; 1e8 scaled by 2**40 is 1.1e20, which overflows a 64-bit raw
+   --  by more than an order of magnitude.  A fixed-point D1 therefore
+   --  cannot take the ratio at all -- it has to compute
+   --  Log (S) - Log (K), which is the same number, avoids the division
+   --  entirely, and keeps both arguments inside Spot_Range where they
+   --  started.  The representation forces the better formulation.
+   subtype Log_Arg is Raw range Scale / 100 .. 1_000_000 * Scale;
+   subtype Log_Result is Raw range -8 * Scale .. 16 * Scale;
+
+   function Log (X : Log_Arg) return Log_Result;
+
 end Graecus.Fixed;

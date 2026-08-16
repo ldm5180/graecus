@@ -169,4 +169,127 @@ is
       return (if X >= 0 then Scale - Upper else Upper);
    end Norm_Cdf;
 
+   --  ln 2, raw: the whole-octave part of a log.
+   Ln2 : constant LLI := 762_123_384_786;
+
+   --  ln (1 + J / 16) and 1 / (1 + J / 16): the sixteenths of the
+   --  mantissa's octave, exactly as Tab above does for exp.  Reducing
+   --  the mantissa onto one of these leaves an argument so close to 1
+   --  that four series terms are already past the grid.
+   --!format off
+   Log_T : constant array (0 .. 15) of LLI :=
+     [0,               66_657_476_617, 129_503_817_259,
+      188_951_355_727, 245_348_929_333, 298_994_282_159,
+      350_143_580_273, 399_018_810_095, 445_813_601_022,
+      490_697_858_666, 533_821_488_828, 575_317_418_281,
+      615_304_065_922, 653_887_380_089, 691_162_530_356,
+      727_215_321_822];
+
+   Inv_T : constant array (0 .. 15) of Unit :=
+     [1_099_511_627_776, 1_034_834_473_201, 977_343_669_134,
+        925_904_528_653,   879_609_302_221, 837_723_144_972,
+        799_644_820_201,   764_877_654_105, 733_007_751_851,
+        703_687_441_777,   676_622_540_170, 651_562_446_089,
+        628_292_358_729,   606_627_104_980, 586_406_201_481,
+        567_489_872_401];
+   --!format on
+
+   --  1/3, 1/5, 1/7 -- the odd atanh series.  With |z| under 0.0304 the
+   --  next term is 4.8e-15, a two-hundredth of an LSB, so the series is
+   --  not what limits accuracy here.
+   L3 : constant LLI := 366_503_875_925;
+   L5 : constant LLI := 219_902_325_555;
+   L7 : constant LLI := 157_073_089_682;
+
+   --  Split X into a mantissa in [1, 2) and a power of two.  This step
+   --  has no analogue in the float version because there the hardware
+   --  format carries the octave; a fixed-point log has to find it.
+   --  Four tests up and five down cover the whole domain, and each is a
+   --  compare and a shift.
+   procedure Normalize (X : Log_Arg; M : out Raw; E : out Integer) is
+   begin
+      M := X;
+      E := 0;
+
+      --  Up to at least 1.0: at most seven doublings, since X >= 0.01.
+      if M < Scale / 2**4 then
+         M := M * 2**4;
+         E := E - 4;
+      end if;
+      if M < Scale / 2**2 then
+         M := M * 2**2;
+         E := E - 2;
+      end if;
+      if M < Scale / 2 then
+         M := M * 2;
+         E := E - 1;
+      end if;
+      if M < Scale then
+         M := M * 2;
+         E := E - 1;
+      end if;
+
+      --  Down to below 2.0: at most nineteen halvings, since X <= 1e6.
+      if M >= Scale * 2**16 then
+         M := M / 2**16;
+         E := E + 16;
+      end if;
+      if M >= Scale * 2**8 then
+         M := M / 2**8;
+         E := E + 8;
+      end if;
+      if M >= Scale * 2**4 then
+         M := M / 2**4;
+         E := E + 4;
+      end if;
+      if M >= Scale * 2**2 then
+         M := M / 2**2;
+         E := E + 2;
+      end if;
+      if M >= Scale * 2 then
+         M := M / 2;
+         E := E + 1;
+      end if;
+   end Normalize;
+
+   function Log (X : Log_Arg) return Log_Result is
+      M : Raw;
+      E : Integer;
+   begin
+      Normalize (X, M, E);
+
+      declare
+         Mant : constant LLI := Clamp (M, Scale, 2 * Scale - 1);
+         J    : constant Natural :=
+           Natural (Clamp ((Mant - Scale) * 16 / Scale, 0, 15));
+
+         --  The mantissa over its sixteenth: within 1/16 of 1.0, and
+         --  reached by a multiply rather than a divide.
+         U : constant LLI := Mul (Mant, Inv_T (J));
+
+         --  atanh's argument, (u - 1) / (u + 1), under 0.0304.
+         Z : constant LLI := Div (Clamp (U - Scale, 0, Scale), U + Scale);
+         --  Clamped like every other operand here, and for the reason
+         --  the bounded-subtypes work established: Mul's postcondition
+         --  is deliberately loose, so an UNclamped W leaves the solver
+         --  deriving its bound through a nonlinear product.  Measured,
+         --  that one range check cost 89,483 steps -- more than the
+         --  whole rest of this unit put together.
+         W : constant LLI := Clamp (Mul (Z, Z), 0, Scale);
+
+         P5 : constant LLI := L5 + Mul (W, L7);
+         P3 : constant LLI := L3 + Mul (W, Clamp (P5, 0, Scale));
+         P1 : constant LLI := Scale + Mul (W, Clamp (P3, 0, Scale));
+      begin
+         return
+           Clamp
+             (LLI (E)
+              * Ln2
+              + Log_T (J)
+              + 2 * Mul (Z, Clamp (P1, 0, 2 * Scale)),
+              -8 * Scale,
+              16 * Scale);
+      end;
+   end Log;
+
 end Graecus.Fixed;
