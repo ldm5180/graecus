@@ -14,6 +14,25 @@ is
    --  total.
    Cdf_Saturation : constant Real := 40.0;
 
+   --  Bounded intermediates.  Each range below is a fact the clamps in
+   --  the bodies already guarantee; naming it as a subtype hands the
+   --  prover the interval ONCE, at the declaration, instead of making
+   --  it re-derive the same bound through the min/max chain at every
+   --  downstream use.  The clamps stay -- they are what makes each
+   --  range check trivially provable, and they keep the saturating
+   --  behaviour a bare subtype would turn into a Constraint_Error.
+   subtype Unit_Real is Real range 0.0 .. 1.0;
+
+   --  The Horner stages: every stage value lives in [-2, 2].
+   subtype Stage_Real is Real range -2.0 .. 2.0;
+
+   --  Saturated CDF arguments, and their squares: |x| <= 40 gives
+   --  x * x <= 1600, so -0.5 * x * x >= -800 -- inside Exp_B's -801.0
+   --  floor with 1.0 to spare.
+   subtype Sat_Real is Real range -Cdf_Saturation .. Cdf_Saturation;
+   subtype Abs_Sat_Real is Real range 0.0 .. Cdf_Saturation;
+   subtype Sat_Square is Real range 0.0 .. 1_600.0;
+
    --  The trusted numerics boundary: the GNAT runtime's elementary
    --  functions carry no usable Posts, so the proof would treat every
    --  Exp as possibly 1.8e308.  These wrappers declare the bounds the
@@ -46,13 +65,19 @@ is
       return Elf.Log (X);
    end Log_B;
 
+   --  The Gaussian exponent's square, bounded by its argument subtype
+   --  so Exp_B's precondition is a linear step rather than a nonlinear
+   --  floating-point derivation the solver has to find on its own.
+   function Square (X : Sat_Real) return Sat_Square
+   is (X * X);
+
    function Decay_Weight (X : Real) return Real
    is (if X >= 800.0
        then 1.0
        else Real'Max (0.0, Real'Min (1.0, 1.0 - Exp_B (-X))));
 
    function Norm_Cdf (X : Real) return Real is
-      Ax : constant Real := Real'Min (abs X, Cdf_Saturation);
+      Ax : constant Abs_Sat_Real := Real'Min (abs X, Cdf_Saturation);
 
       --  Abramowitz-Stegun 26.2.17.
       B1 : constant Real := 0.319381530;
@@ -61,31 +86,32 @@ is
       B4 : constant Real := -1.821255978;
       B5 : constant Real := 1.330274429;
 
-      K : constant Real :=
+      K : constant Unit_Real :=
         Real'Max (0.0, Real'Min (1.0, 1.0 / (1.0 + 0.2316419 * Ax)));
 
       --  Horner's rule one clamped stage at a time: every stage value
       --  lives in [-2, 2] mathematically, so the clamps never bind --
       --  they only hand the prover the interval each product needs.
-      function Staged (X : Real) return Real
+      function Staged (X : Real) return Stage_Real
       is (Real'Min (2.0, Real'Max (-2.0, X)));
 
-      P4 : constant Real := Staged (B4 + K * B5);
-      P3 : constant Real := Staged (B3 + K * P4);
-      P2 : constant Real := Staged (B2 + K * P3);
-      P1 : constant Real := Staged (B1 + K * P2);
+      P4 : constant Stage_Real := Staged (B4 + K * B5);
+      P3 : constant Stage_Real := Staged (B3 + K * P4);
+      P2 : constant Stage_Real := Staged (B2 + K * P3);
+      P1 : constant Stage_Real := Staged (B1 + K * P2);
 
       --  The last Horner term is the same K * stage shape, so it takes
       --  the same never-binding clamp into [-2, 2].
-      Poly : constant Real := Staged (K * P1);
+      Poly : constant Stage_Real := Staged (K * P1);
 
       --  Pdf is naturally in [0, 0.399]; the [0, 1] clamp never binds
       --  either -- it just hands the Pdf * Poly product below a bounded
       --  operand so the overflow check discharges.
-      Pdf : constant Real :=
-        Real'Max (0.0, Real'Min (1.0, Inv_Sqrt_2_Pi * Exp_B (-0.5 * Ax * Ax)));
+      Pdf : constant Unit_Real :=
+        Real'Max
+          (0.0, Real'Min (1.0, Inv_Sqrt_2_Pi * Exp_B (-0.5 * Square (Ax))));
 
-      Upper : constant Real := Real'Min (Real'Max (Pdf * Poly, 0.0), 1.0);
+      Upper : constant Unit_Real := Real'Min (Real'Max (Pdf * Poly, 0.0), 1.0);
    begin
       return (if X >= 0.0 then 1.0 - Upper else Upper);
    end Norm_Cdf;
