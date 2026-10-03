@@ -34,7 +34,8 @@ package Graecus_Steps is
       E_Load_Row,
       E_Check_Row_Iv,
       E_Check_Row_Delta,
-      E_Check_Weight);
+      E_Check_Weight,
+      E_Check_Weight_Refused);
 
    --  The steps that give the contract one of its terms.
    subtype Set_Step is Step_Kind range E_Set_Spot .. E_Set_Premium;
@@ -132,6 +133,8 @@ package Graecus_Steps is
                                                      >= E_Check_Row_Iv,
       Step ("its delta matches the fixture's within {float}")
                                                      >= E_Check_Row_Delta,
+      Step ("a sample {float} time constants after the last is refused")
+                                                     >= E_Check_Weight_Refused,
       Step ("a sample {float} time constants after the last weighs {float} "
             & "within {float}")                      >= E_Check_Weight];
    --!format on

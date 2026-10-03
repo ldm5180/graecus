@@ -191,6 +191,7 @@ first check, the same follow-up the nuntius request uses.
 | `the implied vol is {word}` | `E_Check_Quality` | `computed` / `faint` / `clamped`; guard: a `Quality` name |
 | `the implied vol recovers the vol that priced it within {float}` | `E_Check_Round_Trip` | price at the set vol, invert, compare |
 | `a sample {float} time constants after the last weighs {float} within {float}` | `E_Check_Weight` | `Decay_Weight`; guard: the gap reads and is not negative |
+| `a sample {float} time constants after the last is refused` | `E_Check_Weight_Refused` | `Decay_Weight` raises on the gap's subtype (added after the merge) |
 | `a sample {float} time constants after the last is refused` | `E_Check_Weight_Refused` | guard: reads and IS negative; the `Pre` as a stated feature |
 | `the fixture's IV is matched within {float}` / `delta is matched within {float}` | `E_Check_Row_Iv` / `E_Check_Row_Delta` | the loaded row's Go numbers |
 
@@ -761,3 +762,11 @@ session scratchpad, GNAT 15.2.0, gprbuild 26.0.1, 2026-10-03:
   directory instead of `tests/features/`, so every commit keeps the
   features green; it reported `E_CHECK_DOLLARS is not a step this
   scenario can take now: EMPTY`, as section 5 had.
+
+- 2026-10-03, after the merge: the negative gap G7 left out is now a
+  scenario.  `Decay_Weight`'s domain became the subtype
+  `Graecus.Gap_Range` (0.0 .. Real'Last) instead of `Pre => X >= 0.0`,
+  so a negative gap raises Constraint_Error in every build; the RED
+  showed the test build itself returned a quiet 0.0.  `smoothing.feature`
+  gained "A sample from before the last is refused, in every build", and
+  the unit suite `Test_Decay_Refuses_Negative`.
