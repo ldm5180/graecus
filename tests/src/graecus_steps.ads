@@ -3,6 +3,9 @@ with Fabula.Check;
 with Fabula.Frames;
 with Fabula.Registry;
 
+with Graecus;
+with Graecus_World;
+
 --  The step registry the feature runner dispatches on: one Step_Kind
 --  per pattern, one table that reads like the features, and one Execute
 --  that offers each step to every feature's state machine.
@@ -11,13 +14,24 @@ package Graecus_Steps is
 
    --  The steps, grouped by the feature that reads them.  Each is an
    --  event of that feature's state machine, in its own child package.
-   type Step_Kind is (E_Start, E_Add_Dollars, E_Check_Dollars);
+   type Step_Kind is
+     (E_Set_Spot,
+      E_Set_Contract,
+      E_Set_Days,
+      E_Set_Vol,
+      E_Set_Rate,
+      E_Check_Price,
+      E_Check_Price_Floor,
+      E_Check_Vol_Refused);
+
+   --  The steps that give the contract one of its terms.
+   subtype Set_Step is Step_Kind range E_Set_Spot .. E_Set_Rate;
 
    type Hook_Kind is (Fresh_World);
 
-   --  What one scenario reads back.
+   --  What one scenario composes and reads back.
    type World is record
-      Total : Natural := 0;
+      Contract : Graecus_World.Contract;
    end record;
 
    --  One step as a machine sees it: the scenario, the step's arguments,
@@ -34,16 +48,30 @@ package Graecus_Steps is
 
    procedure Then_Take (Ctx : in out Step_Context; Evt : Step_Kind);
 
-   --  Whether capture N reads as a whole number of zero or more: the
-   --  guard every counting step's rows share.
-   function Count_Read (Ctx : Step_Context; N : Positive := 1) return Boolean;
+   --  Whether capture N reads as a number.
+   function Real_Read (Ctx : Step_Context; N : Positive := 1) return Boolean;
 
-   --  Capture N, which Count_Read said reads.
-   function Count (Ctx : Step_Context; N : Positive := 1) return Natural
-   with Pre => Count_Read (Ctx, N);
+   --  Capture N, which Real_Read said reads.
+   function Real_Of (Ctx : Step_Context; N : Positive := 1) return Graecus.Real
+   with Pre => Real_Read (Ctx, N);
 
-   --  Fail the step for capture N: why it does not read as a count.
-   procedure Refuse_Count (Ctx : in out Step_Context; N : Positive := 1);
+   --  Fail the step for capture N: why it does not read as a number.
+   procedure Refuse_Real (Ctx : in out Step_Context; N : Positive := 1);
+
+   --  Whether the contract has every term Needs names and every capture
+   --  reads as a number: the guard every check that prices shares.
+   function Ready
+     (Ctx : Step_Context; Needs : Graecus_World.Term_Set) return Boolean;
+
+   --  Fail the step that Ready refused: the term the contract lacks, or
+   --  the first capture that does not read.
+   procedure Refuse_Unready
+     (Ctx : in out Step_Context; Needs : Graecus_World.Term_Set);
+
+   --  Check Got against "{float} within {float}", captures 1 and 2.
+   procedure Check_Within
+     (Ctx : in out Step_Context; What : String; Got : Graecus.Real)
+   with Pre => Real_Read (Ctx, 1) and then Real_Read (Ctx, 2);
 
    package Steps is new
      Fabula.Registry
@@ -54,9 +82,14 @@ package Graecus_Steps is
 
    --!format off
    Step_Defs : constant Steps.Step_Table :=
-     [Step ("nothing has been priced")    >= E_Start,
-      Step ("{int} dollars are added")    >= E_Add_Dollars,
-      Step ("the total is {int} dollars") >= E_Check_Dollars];
+     [Step ("an SPX at {float}")                     >= E_Set_Spot,
+      Step ("a {word} struck at {float}")            >= E_Set_Contract,
+      Step ("{float} days to expiry")                >= E_Set_Days,
+      Step ("a vol of {float} is refused")           >= E_Check_Vol_Refused,
+      Step ("a vol of {float}")                      >= E_Set_Vol,
+      Step ("a rate of {float}")                     >= E_Set_Rate,
+      Step ("the price is {float} within {float}")   >= E_Check_Price,
+      Step ("the price is at least {float}")         >= E_Check_Price_Floor];
    --!format on
 
    Hook_Defs : constant Steps.Hook_Table := [Before >= Fresh_World];

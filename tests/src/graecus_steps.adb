@@ -1,9 +1,10 @@
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
-with Fabula.Check.Ints;
+with Fabula.Check.Reals;
 with Fabula.Numbers;
 
-with Graecus_Steps.Smoke;
+with Graecus_Steps.Contract;
+with Graecus_Steps.Pricing;
 
 package body Graecus_Steps is
 
@@ -13,24 +14,69 @@ package body Graecus_Steps is
       Ctx.Next := Evt;
    end Then_Take;
 
-   function Count_Read (Ctx : Step_Context; N : Positive := 1) return Boolean
-   is (N <= Fabula.Args.Count (Ctx.A)
-       and then Fabula.Args.Int (Ctx.A, N).Ok
-       and then Fabula.Args.Int (Ctx.A, N).Value >= 0);
+   function Real_Read (Ctx : Step_Context; N : Positive := 1) return Boolean
+   is (N <= Fabula.Args.Count (Ctx.A) and then Fabula.Args.Real (Ctx.A, N).Ok);
 
-   function Count (Ctx : Step_Context; N : Positive := 1) return Natural
-   is (Fabula.Args.Int (Ctx.A, N).Value);
+   function Real_Of (Ctx : Step_Context; N : Positive := 1) return Graecus.Real
+   is (Fabula.Args.Real (Ctx.A, N).Value);
 
-   procedure Refuse_Count (Ctx : in out Step_Context; N : Positive := 1) is
-      Read : constant Fabula.Numbers.Integer_Reads.Read :=
-        Fabula.Args.Int (Ctx.A, N);
+   procedure Refuse_Real (Ctx : in out Step_Context; N : Positive := 1) is
    begin
-      if Read.Ok then
-         Fabula.Check.Fail_Step (Ctx.R, "a count cannot be negative");
+      if N > Fabula.Args.Count (Ctx.A) then
+         Fabula.Check.Fail_Step (Ctx.R, "the step has no number" & N'Image);
       else
-         Fabula.Check.Ints.Fail_Read (Ctx.R, Read.Error);
+         declare
+            Read : constant Fabula.Numbers.Real_Reads.Read :=
+              Fabula.Args.Real (Ctx.A, N);
+         begin
+            Fabula.Check.Reals.Fail_Read (Ctx.R, Read.Error);
+         end;
       end if;
-   end Refuse_Count;
+   end Refuse_Real;
+
+   function Captures_Read (Ctx : Step_Context) return Boolean
+   is (for all N in 1 .. Fabula.Args.Count (Ctx.A) => Real_Read (Ctx, N));
+
+   function Ready
+     (Ctx : Step_Context; Needs : Graecus_World.Term_Set) return Boolean
+   is (Graecus_World.Has (Ctx.W.Contract, Needs) and then Captures_Read (Ctx));
+
+   procedure Refuse_Unready
+     (Ctx : in out Step_Context; Needs : Graecus_World.Term_Set) is
+   begin
+      if not Graecus_World.Has (Ctx.W.Contract, Needs) then
+         Fabula.Check.Fail_Step
+           (Ctx.R,
+            "the contract has no "
+            & Graecus_World.Name
+                (Graecus_World.First_Missing (Ctx.W.Contract, Needs)));
+         return;
+      end if;
+      for N in 1 .. Fabula.Args.Count (Ctx.A) loop
+         if not Real_Read (Ctx, N) then
+            Refuse_Real (Ctx, N);
+            return;
+         end if;
+      end loop;
+   end Refuse_Unready;
+
+   procedure Check_Within
+     (Ctx : in out Step_Context; What : String; Got : Graecus.Real)
+   is
+      Want      : constant Graecus.Real := Real_Of (Ctx, 1);
+      Tolerance : constant Graecus.Real := Real_Of (Ctx, 2);
+   begin
+      Fabula.Check.Is_True
+        (Ctx.R,
+         abs (Got - Want) <= Tolerance,
+         What
+         & " is "
+         & Fabula.Check.Real_Image (Got)
+         & ", not "
+         & Fabula.Check.Real_Image (Want)
+         & " within "
+         & Fabula.Check.Real_Image (Tolerance));
+   end Check_Within;
 
    ---------------------------------------------------------------------
    --  The features as orthogonal regions: every step is offered to each,
@@ -51,11 +97,13 @@ package body Graecus_Steps is
       Phase : Phase_Access;
    end record;
 
-   Smoke_Name : aliased constant String := "smoke";
+   Contract_Name : aliased constant String := "contract";
+   Pricing_Name  : aliased constant String := "pricing";
 
    --!format off
    Regions : constant array (Positive range <>) of Region :=
-     [(Smoke_Name'Access, Smoke.Offer'Access, Smoke.Reset'Access, Smoke.Phase'Access)];
+     [(Contract_Name'Access, Contract.Offer'Access, Contract.Reset'Access, Contract.Phase'Access),
+      (Pricing_Name'Access,  Pricing.Offer'Access,  Pricing.Reset'Access,  Pricing.Phase'Access)];
    --!format on
 
    --  Every region's state, for the step no region would take.

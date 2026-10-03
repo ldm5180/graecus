@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G2 done (2026-10-03); G3-G9 not started.
+**Status:** G0-G3 done (2026-10-03); G4-G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -456,6 +456,21 @@ existing fixture as the named file.
   `UNDEFINED`; each row turns one step green, Background first.  The
   intrinsic values are what `Test_Properties` implies (a 7480 call
   on a 7500 spot is worth more than 20).
+- **As implemented:** pricing is pure, so every check prices the
+  contract as it stands -- there is no `it is priced` step, no
+  `Priced` state and no follow-up; a check whose contract lacks a
+  term is refused naming it (`the contract has no expiry`).  The
+  shared vocabulary is its own region, `Graecus_Steps.Contract` (one
+  guarded row and one refusing row per term, the term and its
+  envelope read from `Graecus_World`), and `Graecus_Steps.Pricing`
+  holds the price checks.  `a vol of {float} is refused` converts the
+  number to `Vol_Range` and passes when the conversion raises -- the
+  crate's own subtype refuses it, not a guard of the step -- and the
+  scenario states both bounds (7 and 0.0001).  The outline's title
+  says "four days out": a European put deep in the money and about to
+  expire is worth a little UNDER intrinsic (the strike is paid at
+  expiry, so it is discounted), and a fourth scenario states that
+  (`put struck at 7700`, 0.27 days, 199.74 within 0.01).
 
 ### G4 -- `delta.feature`: signed, bounded, and 1 apart
 
