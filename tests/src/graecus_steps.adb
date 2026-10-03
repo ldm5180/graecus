@@ -1,50 +1,29 @@
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+
 with Fabula.Check.Ints;
 with Fabula.Numbers;
 
-with Sml.Machines.Operators;
-with Sml.Simple_Machines;
+with Graecus_Steps.Smoke;
 
 package body Graecus_Steps is
 
-   --  One step as the machine sees it: the scenario, and the step's
-   --  arguments, frame and outcome.
-   type Step_Context is record
-      W    : World;
-      A    : Fabula.Args.List;
-      Info : Fabula.Frames.Frame;
-      R    : Fabula.Check.Outcome;
-   end record;
-
-   --  Empty until a step adds dollars; a check reads the total then.
-   type State is (Empty, Summed);
-
-   type Guard_Kind is (Always, Count_Read);
-
-   type Action_Kind is (A_Nothing, A_Add, A_Refuse_Count, A_Check_Total);
-
-   First_Capture : constant := 1;
-
-   --  Whether the first capture reads as a whole number of zero or more.
-   function Reads_As_Count (Ctx : Step_Context) return Boolean
-   is (Fabula.Args.Count (Ctx.A) >= First_Capture
-       and then Fabula.Args.Int (Ctx.A, First_Capture).Ok
-       and then Fabula.Args.Int (Ctx.A, First_Capture).Value >= 0);
-
-   function Evaluate
-     (G : Guard_Kind; Ctx : Step_Context; Evt : Step_Kind) return Boolean
-   is
-      pragma Unreferenced (Evt);
+   procedure Then_Take (Ctx : in out Step_Context; Evt : Step_Kind) is
    begin
-      return
-        (case G is
-           when Always     => True,
-           when Count_Read => Reads_As_Count (Ctx));
-   end Evaluate;
+      Ctx.Has_Next := True;
+      Ctx.Next := Evt;
+   end Then_Take;
 
-   --  Fail the step: why its capture does not read as a count.
-   procedure Refuse_Count (Ctx : in out Step_Context) is
+   function Count_Read (Ctx : Step_Context; N : Positive := 1) return Boolean
+   is (N <= Fabula.Args.Count (Ctx.A)
+       and then Fabula.Args.Int (Ctx.A, N).Ok
+       and then Fabula.Args.Int (Ctx.A, N).Value >= 0);
+
+   function Count (Ctx : Step_Context; N : Positive := 1) return Natural
+   is (Fabula.Args.Int (Ctx.A, N).Value);
+
+   procedure Refuse_Count (Ctx : in out Step_Context; N : Positive := 1) is
       Read : constant Fabula.Numbers.Integer_Reads.Read :=
-        Fabula.Args.Int (Ctx.A, First_Capture);
+        Fabula.Args.Int (Ctx.A, N);
    begin
       if Read.Ok then
          Fabula.Check.Fail_Step (Ctx.R, "a count cannot be negative");
@@ -53,61 +32,41 @@ package body Graecus_Steps is
       end if;
    end Refuse_Count;
 
-   procedure Execute
-     (A : Action_Kind; Ctx : in out Step_Context; Evt : Step_Kind)
-   is
-      pragma Unreferenced (Evt);
-   begin
-      case A is
-         when A_Nothing      =>
-            null;
+   ---------------------------------------------------------------------
+   --  The features as orthogonal regions: every step is offered to each,
+   --  and each takes only its own.
+   ---------------------------------------------------------------------
 
-         when A_Add          =>
-            Ctx.W.Total :=
-              Ctx.W.Total + Fabula.Args.Int (Ctx.A, First_Capture).Value;
+   type Offer_Access is
+     access procedure
+       (Ctx : in out Step_Context; Evt : Step_Kind; Handled : out Boolean);
+   type Reset_Access is access procedure;
+   type Phase_Access is access function return String;
+   type Name_Access is access constant String;
 
-         when A_Refuse_Count =>
-            Refuse_Count (Ctx);
+   type Region is record
+      Name  : Name_Access;
+      Offer : Offer_Access;
+      Reset : Reset_Access;
+      Phase : Phase_Access;
+   end record;
 
-         when A_Check_Total  =>
-            Fabula.Check.Ints.Equal
-              (Ctx.R,
-               Ctx.W.Total,
-               Fabula.Args.Int (Ctx.A, First_Capture),
-               "the total");
-      end case;
-   end Execute;
-
-   package Machines is new
-     Sml.Simple_Machines
-       (State       => State,
-        Event       => Step_Kind,
-        Context     => Step_Context,
-        Guard_Kind  => Guard_Kind,
-        Action_Kind => Action_Kind,
-        Evaluate    => Evaluate,
-        Execute     => Execute);
-
-   package Op is new Machines.Engine.Operators (Always, A_Nothing);
-
-   use Machines;
-   use Op;
-
-   Start         : constant Ev := (Kind => E_Start);
-   Add_Dollars   : constant Ev := (Kind => E_Add_Dollars);
-   Check_Dollars : constant Ev := (Kind => E_Check_Dollars);
+   Smoke_Name : aliased constant String := "smoke";
 
    --!format off
-   Table : constant Transition_Table :=
-     [Empty  + Start                    / A_Nothing      >= Empty,
-      Empty  + Add_Dollars (Count_Read) / A_Add          >= Summed,
-      Empty  + Add_Dollars              / A_Refuse_Count >= Empty,
-      Summed + Add_Dollars (Count_Read) / A_Add          >= Summed,
-      Summed + Add_Dollars              / A_Refuse_Count >= Summed,
-      Summed + Check_Dollars            / A_Check_Total  >= Summed];
+   Regions : constant array (Positive range <>) of Region :=
+     [(Smoke_Name'Access, Smoke.Offer'Access, Smoke.Reset'Access, Smoke.Phase'Access)];
    --!format on
 
-   Current : State := Empty;
+   --  Every region's state, for the step no region would take.
+   function Phases return String is
+      Text : Unbounded_String;
+   begin
+      for G of Regions loop
+         Append (Text, " " & G.Name.all & "=" & G.Phase.all);
+      end loop;
+      return To_String (Text);
+   end Phases;
 
    procedure Execute
      (S    : Step_Kind;
@@ -116,20 +75,21 @@ package body Graecus_Steps is
       Info : Fabula.Frames.Frame;
       R    : in out Fabula.Check.Outcome)
    is
-      Step    : Step_Context := (W => Ctx, A => A, Info => Info, R => R);
-      M       : Machine := Make (Table, Initial => Current);
+      Step    : Step_Context :=
+        (W => Ctx, A => A, Info => Info, R => R, others => <>);
+      Taken   : Boolean := False;
       Handled : Boolean;
    begin
-      Engine.Process_Event (M, Step, S, Handled);
-      Current := State_Of (M);
+      for G of Regions loop
+         G.Offer (Step, S, Handled);
+         Taken := Taken or else Handled;
+      end loop;
       Ctx := Step.W;
       R := Step.R;
-      if not Handled then
+      if not Taken then
          Fabula.Check.Fail_Step
            (R,
-            S'Image
-            & " is not a step this scenario can take now: "
-            & Current'Image);
+            S'Image & " is not a step this scenario can take now:" & Phases);
       end if;
    end Execute;
 
@@ -139,10 +99,15 @@ package body Graecus_Steps is
       Info : Fabula.Frames.Frame;
       R    : in out Fabula.Check.Outcome)
    is
-      pragma Unreferenced (H, Info, R);
+      pragma Unreferenced (Info, R);
    begin
-      Ctx := (others => <>);
-      Current := Empty;
+      case H is
+         when Fresh_World =>
+            Ctx := (others => <>);
+            for G of Regions loop
+               G.Reset.all;
+            end loop;
+      end case;
    end Run_Hook;
 
 end Graecus_Steps;

@@ -5,11 +5,12 @@ with Fabula.Registry;
 
 --  The step registry the feature runner dispatches on: one Step_Kind
 --  per pattern, one table that reads like the features, and one Execute
---  that offers each step to the feature's state machine.
+--  that offers each step to every feature's state machine.
 
 package Graecus_Steps is
 
-   --  The steps: each is an event of the feature's state machine.
+   --  The steps, grouped by the feature that reads them.  Each is an
+   --  event of that feature's state machine, in its own child package.
    type Step_Kind is (E_Start, E_Add_Dollars, E_Check_Dollars);
 
    type Hook_Kind is (Fresh_World);
@@ -18,6 +19,31 @@ package Graecus_Steps is
    type World is record
       Total : Natural := 0;
    end record;
+
+   --  One step as a machine sees it: the scenario, the step's arguments,
+   --  frame and outcome, and the event an action asks to be taken next
+   --  (Then_Take), which the runner posts before the step returns.
+   type Step_Context is record
+      W        : World;
+      A        : Fabula.Args.List;
+      Info     : Fabula.Frames.Frame;
+      R        : Fabula.Check.Outcome;
+      Has_Next : Boolean := False;
+      Next     : Step_Kind := Step_Kind'First;
+   end record;
+
+   procedure Then_Take (Ctx : in out Step_Context; Evt : Step_Kind);
+
+   --  Whether capture N reads as a whole number of zero or more: the
+   --  guard every counting step's rows share.
+   function Count_Read (Ctx : Step_Context; N : Positive := 1) return Boolean;
+
+   --  Capture N, which Count_Read said reads.
+   function Count (Ctx : Step_Context; N : Positive := 1) return Natural
+   with Pre => Count_Read (Ctx, N);
+
+   --  Fail the step for capture N: why it does not read as a count.
+   procedure Refuse_Count (Ctx : in out Step_Context; N : Positive := 1);
 
    package Steps is new
      Fabula.Registry
