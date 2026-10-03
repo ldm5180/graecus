@@ -201,6 +201,24 @@ package body Graecus_Tests is
       Assert (Decay_Weight (1.0e6) = 1.0, "a huge gap saturates at 1");
    end Test_Decay;
 
+   --  A negative gap is outside the weight's domain, and the domain is a
+   --  subtype: the call raises Constraint_Error in every build, never an
+   --  assertion that a build without -gnata would skip.
+   procedure Test_Decay_Refuses_Negative
+     (T : in out AUnit.Test_Cases.Test_Case'Class)
+   is
+      pragma Unreferenced (T);
+      use Graecus;
+      Gap : constant Real := Real'Value ("-0.5");
+      W   : Real;
+   begin
+      W := Decay_Weight (Gap);
+      Assert (False, "a negative gap weighed" & W'Image);
+   exception
+      when Constraint_Error =>
+         null;
+   end Test_Decay_Refuses_Negative;
+
    --  The normal CDF's fixed points: one half at zero (to the 26.2.17
    --  approximation's own bias, 5.3e-9 there), and saturated at the
    --  +/-40 where its input is clamped.
@@ -227,6 +245,10 @@ package body Graecus_Tests is
          Test_Round_Trip'Access,
          "price then invert recovers the vol, bounding the early exit");
       Register_Routine (T, Test_Decay'Access, "the EMA decay weight");
+      Register_Routine
+        (T,
+         Test_Decay_Refuses_Negative'Access,
+         "a negative gap is refused by subtype");
       Register_Routine
         (T, Test_Norm_Cdf'Access, "the normal CDF's fixed points");
    end Register_Tests;

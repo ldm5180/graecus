@@ -83,7 +83,7 @@ is
    function Square (X : Sat_Real) return Sat_Square
    is (X * X);
 
-   function Decay_Weight (X : Real) return Real
+   function Decay_Weight (X : Gap_Range) return Real
    is (if X >= 800.0
        then 1.0
        else Real'Max (0.0, Real'Min (1.0, 1.0 - Exp_B (-X))));

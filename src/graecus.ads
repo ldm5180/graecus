@@ -64,11 +64,16 @@ is
    function Norm_Cdf (X : Real) return Real
    with Post => Norm_Cdf'Result in 0.0 .. 1.0;
 
+   --  A gap between two samples, counted in time constants; never
+   --  negative.  A subtype rather than a precondition, so a negative gap
+   --  raises Constraint_Error in every build, release included.
+   subtype Gap_Range is Real range 0.0 .. Real'Last;
+
    --  1 - exp(-X): the EMA weight of a new sample X time constants
    --  after the last one (an IV-skew signal's smoothing); saturates
    --  at 1 past X = 800, where exp underflows anyway.
-   function Decay_Weight (X : Real) return Real
-   with Pre => X >= 0.0, Post => Decay_Weight'Result in 0.0 .. 1.0;
+   function Decay_Weight (X : Gap_Range) return Real
+   with Post => Decay_Weight'Result in 0.0 .. 1.0;
 
    --  The Black-Scholes European price; never negative.
    function Price
