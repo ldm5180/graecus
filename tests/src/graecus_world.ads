@@ -13,7 +13,7 @@ package Graecus_World is
    function Field (Line : String; N : Positive) return String;
 
    --  The numbers a scenario names to make a contract.
-   type Term is (Spot, Strike, Expiry, Vol, Rate);
+   type Term is (Spot, Strike, Expiry, Vol, Rate, Premium);
 
    --  T as a sentence names it: "vol", "expiry".
    function Name (T : Term) return String;
@@ -32,8 +32,11 @@ package Graecus_World is
    --  Calendar days in a year, as the fixture's year fractions count them.
    Days_Per_Year : constant := 365.25;
 
-   --  The terms Price and Delta_Of read: all of them.
-   Priced_Terms : constant Term_Set := [others => True];
+   --  The terms Price and Delta_Of read: all but a premium.
+   Priced_Terms : constant Term_Set := [Premium => False, others => True];
+
+   --  The terms Implied_Vol reads: all but a vol.
+   Seeking_Terms : constant Term_Set := [Vol => False, others => True];
 
    function Has (C : Contract; Needs : Term_Set) return Boolean
    is (for all T in Term => C.Given (T) or else not Needs (T));
@@ -55,6 +58,11 @@ package Graecus_World is
 
    function Price_Of (C : Contract) return Real
    with Pre => Has (C, Priced_Terms);
+
+   --  The vol C's premium implies, and whether to trust it.
+   procedure Seek
+     (C : Contract; Iv : out Vol_Range; Quality : out Graecus.Quality)
+   with Pre => Has (C, Seeking_Terms);
 
    --  The delta of C's terms for Right, whatever right C was given.
    function Delta_Of (C : Contract; Right : Option_Right) return Real

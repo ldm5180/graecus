@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G4 done (2026-10-03); G5-G9 not started.
+**Status:** G0-G5 done (2026-10-03); G6-G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -526,6 +526,17 @@ existing fixture as the named file.
 - **RED first:** `the vol it implies is sought` is `UNDEFINED`;
   green on the round trip at the `Test_Properties` contract (7500 /
   7480 / 4 days / 0.18).
+- **As implemented:** the premium is a sixth term of the contract
+  (`a premium of {float}`, refused outside `Premium_Range`); pricing
+  reads every term but it, seeking every term but the vol.  Seeking
+  makes the implied vol the contract's vol, so `the delta is 1 within
+  0.005` after it is the delta at that vol, as a consumer takes it.
+  No `E_Judged` follow-up: nothing branches on the quality once it is
+  known -- the vol is adopted whatever it is -- so the quality is read
+  by its own check, whose guard names the three words.  The round
+  trip also checks the quality is `computed`.  A fifth scenario states
+  a living premium (`4dte_atm`'s 58.2131620126 implies 0.18 within
+  0.0001), and the faint one is `0dte_calm_deep CALL`'s premium.
 
 ### G6 -- `parity.feature`: the fixture, by name
 

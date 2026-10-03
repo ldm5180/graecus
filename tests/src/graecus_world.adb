@@ -45,21 +45,24 @@ package body Graecus_World is
          when Spot | Strike => X in Spot_Range,
          when Expiry        => Years (X) in Year_Fraction,
          when Vol           => X in Vol_Range,
-         when Rate          => X in Rate_Range);
+         when Rate          => X in Rate_Range,
+         when Premium       => X in Premium_Range);
 
    function Low (T : Term) return Real
    is (case T is
          when Spot | Strike => Spot_Range'First,
          when Expiry        => Year_Fraction'First * Days_Per_Year,
          when Vol           => Vol_Range'First,
-         when Rate          => Rate_Range'First);
+         when Rate          => Rate_Range'First,
+         when Premium       => Premium_Range'First);
 
    function High (T : Term) return Real
    is (case T is
          when Spot | Strike => Spot_Range'Last,
          when Expiry        => Year_Fraction'Last * Days_Per_Year,
          when Vol           => Vol_Range'Last,
-         when Rate          => Rate_Range'Last);
+         when Rate          => Rate_Range'Last,
+         when Premium       => Premium_Range'Last);
 
    function Envelope (T : Term) return String
    is ("the "
@@ -84,6 +87,20 @@ package body Graecus_World is
           C.Value (Vol),
           C.Value (Rate),
           C.Right));
+
+   procedure Seek
+     (C : Contract; Iv : out Vol_Range; Quality : out Graecus.Quality) is
+   begin
+      Implied_Vol
+        (C.Value (Premium),
+         C.Value (Spot),
+         C.Value (Strike),
+         C.Value (Expiry),
+         C.Value (Rate),
+         C.Right,
+         Iv,
+         Quality);
+   end Seek;
 
    function Delta_Of (C : Contract; Right : Option_Right) return Real
    is (Graecus.Delta_Of

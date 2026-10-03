@@ -21,7 +21,8 @@ package body Graecus_Steps.Contract is
          when E_Set_Contract => Strike,
          when E_Set_Days     => Expiry,
          when E_Set_Vol      => Vol,
-         when E_Set_Rate     => Rate);
+         when E_Set_Rate     => Rate,
+         when E_Set_Premium  => Premium);
 
    --  Which capture holds the number a step gives.
    function Number_Of (Evt : Set_Step) return Positive
@@ -115,6 +116,7 @@ package body Graecus_Steps.Contract is
    Set_Days     : constant Ev := (Kind => E_Set_Days);
    Set_Vol      : constant Ev := (Kind => E_Set_Vol);
    Set_Rate     : constant Ev := (Kind => E_Set_Rate);
+   Set_Premium  : constant Ev := (Kind => E_Set_Premium);
 
    --!format off
    Table : constant Transition_Table :=
@@ -127,7 +129,9 @@ package body Graecus_Steps.Contract is
       Composing + Set_Vol      (Fits_Envelope) / A_Give   >= Composing,
       Composing + Set_Vol                      / A_Refuse >= Composing,
       Composing + Set_Rate     (Fits_Envelope) / A_Give   >= Composing,
-      Composing + Set_Rate                     / A_Refuse >= Composing];
+      Composing + Set_Rate                     / A_Refuse >= Composing,
+      Composing + Set_Premium  (Fits_Envelope) / A_Give   >= Composing,
+      Composing + Set_Premium                  / A_Refuse >= Composing];
    --!format on
 
    Current : State := Composing;

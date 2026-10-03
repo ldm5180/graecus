@@ -1,6 +1,6 @@
 --  The contract a scenario composes (pricing.feature and every feature
---  that prices): a spot, a strike and its right, days to expiry, a vol
---  and a rate, each refused outside the crate's envelope for it.
+--  that prices): a spot, a strike and its right, days to expiry, a vol,
+--  a rate and a premium, each refused outside the crate's envelope for it.
 --  A region of the registry: Offer takes this feature's steps, Reset
 --  starts a scenario, Phase names its state.
 
