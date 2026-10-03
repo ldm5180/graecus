@@ -27,7 +27,7 @@ Computed/Faint/Clamped `Quality` verdict, `Decay_Weight`, and the
 - `tests/` — AUnit suite (`test_graecus.gpr`, driver `test_runner.adb`)
   + `tests/data/options_bot_greeks.csv`, the 36-row parity fixture.
 - `proof/` — gnatprove harness; `proof.gpr` sources `../src` directly
-  and withs nothing (the crate has no dependencies) — the simplest
+  and withs nothing (the library has no dependencies) — the simplest
   proof tree of any sibling.
 - `example/` — one demo main (`iv_of_premium`).
 - `docs/tdd-log.md` — git-ignored TDD audit log.
@@ -38,6 +38,9 @@ Computed/Faint/Clamped `Quality` verdict, `Decay_Weight`, and the
   `Arb.Theta.Frames`) subtype `Option_Right` from here, which makes
   graecus part of their wire-type substrate — a transitive dependency
   added here becomes theirs.
+  The contract is about the library: test-only dependencies (aunit,
+  fabula) are not the library's — `graecus.gpr` withs neither, and the
+  proof tree withs nothing.
 - The fixture is characterization truth: 36 rows dumped through
   options_bot's exact library calls, including the vega-dead rows where
   the Go library returns its own seed (those must classify Faint/Clamped,

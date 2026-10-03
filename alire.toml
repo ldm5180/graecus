@@ -13,9 +13,20 @@ project-files = ["graecus.gpr"]
 
 #  The library itself depends on nothing but the Ada standard library --
 #  deliberately: consumers subtype Option_Right from here, so this crate
-#  must never grow a transitive dependency.  AUnit is tests-only.
+#  must never grow a transitive dependency.  AUnit and fabula are
+#  tests-only: graecus.gpr withs neither, so a consumer's build of the
+#  library links nothing new.
 [[depends-on]]
 aunit = "^26.0.0"
+fabula = "*"
+
+#  fabula, the Gherkin runner the features under tests/features/ run on,
+#  is not in the community index; pin it to an exact commit so a build is
+#  reproducible from this file alone.  It brings sml, pinned at the commit
+#  every ldm5180 sibling pins -- alr refuses two links to one crate at
+#  different commits, so a consumer workspace must carry the same one.
+[[pins]]
+fabula = { url = "https://github.com/ldm5180/fabula.git", commit = "746a234df5581c2e38c4202aeee8b07473fb6a51" }
 
 [build-switches]
 "*".ada_version = "Ada2022"
