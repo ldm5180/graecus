@@ -3,6 +3,7 @@ with Ada.Text_IO;
 with AUnit.Assertions; use AUnit.Assertions;
 
 with Graecus;
+with Graecus_World;
 
 package body Graecus_Tests is
 
@@ -26,28 +27,11 @@ package body Graecus_Tests is
       File    : File_Type;
       Checked : Natural := 0;
 
-      --  The Nth comma-separated field of a fixture line.
-      function Field (Line : String; N : Positive) return String is
-         Start : Positive := Line'First;
-         Count : Positive := 1;
-      begin
-         for I in Line'Range loop
-            if Line (I) = ',' then
-               if Count = N then
-                  return Line (Start .. I - 1);
-               end if;
-               Count := Count + 1;
-               Start := I + 1;
-            end if;
-         end loop;
-         if Count = N then
-            return Line (Start .. Line'Last);
-         end if;
-         return "";
-      end Field;
-
+      --  The fixture's own splitter: Ada.Text_IO also names a Field.
+      function Field (Line : String; N : Positive) return String
+      renames Graecus_World.Field;
    begin
-      Open (File, In_File, "tests/data/options_bot_greeks.csv");
+      Open (File, In_File, Graecus_World.Fixture_Path);
       Skip_Line (File);  --  header
       while not End_Of_File (File) loop
          declare
