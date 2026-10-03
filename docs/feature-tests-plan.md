@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G1 done (2026-10-03); G2-G9 not started.
+**Status:** G0-G2 done (2026-10-03); G3-G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -392,6 +392,11 @@ existing fixture as the named file.
   name; green when `make test` passes 4/4 both modes with no
   assertion changed, and the smoke feature still runs through
   `Flows.Take`.
+- **As implemented:** each piece arrived with its first caller, so
+  G2 lifted `Field` and `Fixture_Path` (the parity test renames the
+  world's `Field` locally, since `Ada.Text_IO` names one too), the
+  runner, the regions and the `Count` trio; the contract record and
+  the `Real` trio came with G3, and `Load_Row` with G6.
 
 ### G3 -- `pricing.feature`: a premium is never negative, and intrinsic is a floor
 
