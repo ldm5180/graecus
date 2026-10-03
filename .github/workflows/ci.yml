@@ -36,11 +36,12 @@ jobs:
         # The profile is persisted in config/ and inherited by later steps.
         run: alr --non-interactive build --validation
 
-      - name: Run the test suite (release -O3 and debug -O0)
+      - name: Run the test suite and the features (release -O3 and debug -O0)
         # `alr test` builds tests/test_graecus.gpr and runs the AUnit runner
-        # twice -- once per MODE (see the [[actions]] in alire.toml) --
-        # exiting non-zero on any failed assertion.  The suite is fully
-        # offline: the library is pure, so there is nothing to fake.
+        # and then the Gherkin features under tests/features/ once per
+        # MODE (see the [[actions]] in alire.toml), exiting non-zero on any
+        # failed assertion or scenario.  Both are fully offline: the
+        # library is pure, so there is nothing to fake.
         run: alr --non-interactive test
 
       - name: Build & run the release example (-O3)
