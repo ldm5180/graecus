@@ -32,6 +32,9 @@ package Graecus_World is
    --  Calendar days in a year, as the fixture's year fractions count them.
    Days_Per_Year : constant := 365.25;
 
+   --  No terms: what a check that reads no contract needs.
+   No_Terms : constant Term_Set := [others => False];
+
    --  The terms Price and Delta_Of read: all but a premium.
    Priced_Terms : constant Term_Set := [Premium => False, others => True];
 
