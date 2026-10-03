@@ -6,6 +6,7 @@ with Fabula.Numbers;
 with Graecus_Steps.Contract;
 with Graecus_Steps.Deltas;
 with Graecus_Steps.Implied;
+with Graecus_Steps.Parity;
 with Graecus_Steps.Pricing;
 
 package body Graecus_Steps is
@@ -108,13 +109,15 @@ package body Graecus_Steps is
    Pricing_Name  : aliased constant String := "pricing";
    Delta_Name    : aliased constant String := "delta";
    Implied_Name  : aliased constant String := "implied vol";
+   Parity_Name   : aliased constant String := "parity";
 
    --!format off
    Regions : constant array (Positive range <>) of Region :=
      [(Contract_Name'Access, Contract.Offer'Access, Contract.Reset'Access, Contract.Phase'Access),
       (Pricing_Name'Access,  Pricing.Offer'Access,  Pricing.Reset'Access,  Pricing.Phase'Access),
       (Delta_Name'Access,    Deltas.Offer'Access,   Deltas.Reset'Access,   Deltas.Phase'Access),
-      (Implied_Name'Access,  Implied.Offer'Access,  Implied.Reset'Access,  Implied.Phase'Access)];
+      (Implied_Name'Access,  Implied.Offer'Access,  Implied.Reset'Access,  Implied.Phase'Access),
+      (Parity_Name'Access,   Parity.Offer'Access,   Parity.Reset'Access,   Parity.Phase'Access)];
    --!format on
 
    --  Every region's state, for the step no region would take.

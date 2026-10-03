@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G5 done (2026-10-03); G6-G9 not started.
+**Status:** G0-G6 done (2026-10-03); G7-G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -559,6 +559,16 @@ existing fixture as the named file.
   hold fails the step with the name.
 - **RED first:** `the fixture row 4dte_atm PUT` is `UNDEFINED`; green
   when the row's IV matches within 0.002.
+- **As implemented:** two outlines, twelve rows.  Eight where the Go
+  library found the vol (`its implied vol matches the fixture's within
+  0.002`, `its delta matches the fixture's within 0.005`) and four
+  where no vol can be found, which reuse G5's `the vol it implies is
+  sought` and `the implied vol is faint/clamped` before the delta
+  match.  `Graecus_World.Row_Of` reads a fixture line into a
+  `Fixture_Row`, and the parity test now reads its rows through it
+  (renames for the old names, `Fixture_Rate` for its rate) -- one
+  reader of the file, no assertion changed; `Has_Row` / `Row` find a
+  row by name for the guard and the action.
 
 ### G7 -- `smoothing.feature`: how fast a new sample takes over
 

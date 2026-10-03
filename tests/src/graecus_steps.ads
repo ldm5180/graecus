@@ -30,7 +30,10 @@ package Graecus_Steps is
       E_Implied,
       E_Check_Iv,
       E_Check_Quality,
-      E_Check_Round_Trip);
+      E_Check_Round_Trip,
+      E_Load_Row,
+      E_Check_Row_Iv,
+      E_Check_Row_Delta);
 
    --  The steps that give the contract one of its terms.
    subtype Set_Step is Step_Kind range E_Set_Spot .. E_Set_Premium;
@@ -47,6 +50,7 @@ package Graecus_Steps is
    type World is record
       Contract : Graecus_World.Contract;
       Implied  : Implied_Reading;
+      Row      : Graecus_World.Fixture_Row;
    end record;
 
    --  One step as a machine sees it: the scenario, the step's arguments,
@@ -121,7 +125,12 @@ package Graecus_Steps is
                                                      >= E_Check_Round_Trip,
       Step ("the implied vol is {float} within {float}")
                                                      >= E_Check_Iv,
-      Step ("the implied vol is {word}")             >= E_Check_Quality];
+      Step ("the implied vol is {word}")             >= E_Check_Quality,
+      Step ("the fixture row {word} {word}")         >= E_Load_Row,
+      Step ("its implied vol matches the fixture's within {float}")
+                                                     >= E_Check_Row_Iv,
+      Step ("its delta matches the fixture's within {float}")
+                                                     >= E_Check_Row_Delta];
    --!format on
 
    Hook_Defs : constant Steps.Hook_Table := [Before >= Fresh_World];
