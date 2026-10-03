@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G6 done (2026-10-03); G7-G9 not started.
+**Status:** G0-G7 done (2026-10-03); G8-G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -594,6 +594,18 @@ existing fixture as the named file.
 - **RED first:** `a sample 1 time constants after the last weighs
   0.632 within 0.001` is `UNDEFINED`; green on that row.  The unit
   side: `Test_Norm_Cdf` registered and asserting 0.5 at zero.
+- **As implemented:** five rows (0, 0.5, 1, 3 and 800 time constants)
+  and **no negative-gap scenario**.  `Decay_Weight`'s `Pre` is checked
+  inside the library, so whether a negative gap raises depends on the
+  profile the library was built with: probed 2026-10-03, the
+  validation profile raises and `alr build --release` returns 0.0.
+  That is the proof's promise to a SPARK caller, not a run-time
+  behavior a feature can bind across builds; the step still refuses a
+  negative gap itself (`a gap cannot be negative`) rather than call
+  outside the contract.  `a vol of 7 is refused` (G3) differs: the
+  conversion to `Vol_Range` happens in the caller, whose checks are
+  always on.  `Test_Norm_Cdf` is its own commit, RED by a mutated
+  `B1` coefficient (3 failed assertions, restored).
 
 ### G8 -- The living documentation
 
