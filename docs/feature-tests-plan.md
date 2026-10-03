@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G7 done (2026-10-03); G8-G9 not started.
+**Status:** G0-G8 done (2026-10-03); G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -637,6 +637,12 @@ existing fixture as the named file.
   green when `obj/features-report/html/index.html` exists and names
   five features.  Then break one expectation: the page is still
   rendered and the target exits non-zero.
+- **As implemented:** as written; the tooling is nuntius's with the
+  names changed (the lockfile's two `name` fields included), and the
+  page's footer says the features run against the proven functions.
+  Verified: the page names the five features, the target exits 0
+  green and 2 with one expectation broken, the page rendered either
+  way.  Pages is enabled when the branch is pushed.
 
 ### G9 -- The docs say so
 
