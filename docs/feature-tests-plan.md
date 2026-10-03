@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0 done (2026-10-03); G1-G9 not started.
+**Status:** G0-G1 done (2026-10-03); G2-G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -353,8 +353,11 @@ existing fixture as the named file.
 
   The second scenario FAILS by design (`E_CHECK_DOLLARS is not a step
   this scenario can take now`), which is the proof the machine
-  refuses out-of-order steps; it is replaced by `pricing.feature`'s
-  own refusal scenario in G3 and does not survive to `main`.
+  refuses out-of-order steps.  **As implemented:** it runs from a
+  scratch feature directory, not from `tests/features/` -- a committed
+  failing scenario would fail `make features` and `alr test` at this
+  commit -- and the committed smoke is the first scenario alone, which
+  `pricing.feature` replaces in G3.
 
 ### G2 -- The runner, the regions and the world
 
@@ -686,3 +689,8 @@ session scratchpad, GNAT 15.2.0, gprbuild 26.0.1, 2026-10-03:
   `Quality` a consumer receives, and the parity contract are the
   crate's externally visible promises; the fixture setup stays
   white-box by design.
+- **As implemented (2026-10-03):** G0 decided as recommended (the same
+  manifest).  G1's out-of-order smoke scenario ran from a scratch
+  directory instead of `tests/features/`, so every commit keeps the
+  features green; it reported `E_CHECK_DOLLARS is not a step this
+  scenario can take now: EMPTY`, as section 5 had.
