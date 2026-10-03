@@ -5,6 +5,7 @@ with Fabula.Numbers;
 
 with Graecus_Steps.Contract;
 with Graecus_Steps.Deltas;
+with Graecus_Steps.Implied;
 with Graecus_Steps.Pricing;
 
 package body Graecus_Steps is
@@ -61,11 +62,10 @@ package body Graecus_Steps is
       end loop;
    end Refuse_Unready;
 
-   procedure Check_Within
-     (Ctx : in out Step_Context; What : String; Got : Graecus.Real)
-   is
-      Want      : constant Graecus.Real := Real_Of (Ctx, 1);
-      Tolerance : constant Graecus.Real := Real_Of (Ctx, 2);
+   procedure Check_Close
+     (Ctx                  : in out Step_Context;
+      What                 : String;
+      Got, Want, Tolerance : Graecus.Real) is
    begin
       Fabula.Check.Is_True
         (Ctx.R,
@@ -77,6 +77,12 @@ package body Graecus_Steps is
          & Fabula.Check.Real_Image (Want)
          & " within "
          & Fabula.Check.Real_Image (Tolerance));
+   end Check_Close;
+
+   procedure Check_Within
+     (Ctx : in out Step_Context; What : String; Got : Graecus.Real) is
+   begin
+      Check_Close (Ctx, What, Got, Real_Of (Ctx, 1), Real_Of (Ctx, 2));
    end Check_Within;
 
    ---------------------------------------------------------------------
@@ -101,12 +107,14 @@ package body Graecus_Steps is
    Contract_Name : aliased constant String := "contract";
    Pricing_Name  : aliased constant String := "pricing";
    Delta_Name    : aliased constant String := "delta";
+   Implied_Name  : aliased constant String := "implied vol";
 
    --!format off
    Regions : constant array (Positive range <>) of Region :=
      [(Contract_Name'Access, Contract.Offer'Access, Contract.Reset'Access, Contract.Phase'Access),
       (Pricing_Name'Access,  Pricing.Offer'Access,  Pricing.Reset'Access,  Pricing.Phase'Access),
-      (Delta_Name'Access,    Deltas.Offer'Access,   Deltas.Reset'Access,   Deltas.Phase'Access)];
+      (Delta_Name'Access,    Deltas.Offer'Access,   Deltas.Reset'Access,   Deltas.Phase'Access),
+      (Implied_Name'Access,  Implied.Offer'Access,  Implied.Reset'Access,  Implied.Phase'Access)];
    --!format on
 
    --  Every region's state, for the step no region would take.

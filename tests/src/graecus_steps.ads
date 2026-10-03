@@ -20,21 +20,33 @@ package Graecus_Steps is
       E_Set_Days,
       E_Set_Vol,
       E_Set_Rate,
+      E_Set_Premium,
       E_Check_Price,
       E_Check_Price_Floor,
       E_Check_Vol_Refused,
       E_Check_Delta,
       E_Check_Delta_Sign,
-      E_Check_Delta_Sum);
+      E_Check_Delta_Sum,
+      E_Implied,
+      E_Check_Iv,
+      E_Check_Quality,
+      E_Check_Round_Trip);
 
    --  The steps that give the contract one of its terms.
-   subtype Set_Step is Step_Kind range E_Set_Spot .. E_Set_Rate;
+   subtype Set_Step is Step_Kind range E_Set_Spot .. E_Set_Premium;
 
    type Hook_Kind is (Fresh_World);
+
+   --  The vol a contract's premium implies, and whether to trust it.
+   type Implied_Reading is record
+      Iv      : Graecus.Vol_Range := Graecus.Min_Vol;
+      Quality : Graecus.Quality := Graecus.Clamped;
+   end record;
 
    --  What one scenario composes and reads back.
    type World is record
       Contract : Graecus_World.Contract;
+      Implied  : Implied_Reading;
    end record;
 
    --  One step as a machine sees it: the scenario, the step's arguments,
@@ -71,6 +83,12 @@ package Graecus_Steps is
    procedure Refuse_Unready
      (Ctx : in out Step_Context; Needs : Graecus_World.Term_Set);
 
+   --  Check that Got is Want to within Tolerance; What names Got.
+   procedure Check_Close
+     (Ctx                  : in out Step_Context;
+      What                 : String;
+      Got, Want, Tolerance : Graecus.Real);
+
    --  Check Got against "{float} within {float}", captures 1 and 2.
    procedure Check_Within
      (Ctx : in out Step_Context; What : String; Got : Graecus.Real)
@@ -91,12 +109,19 @@ package Graecus_Steps is
       Step ("a vol of {float} is refused")           >= E_Check_Vol_Refused,
       Step ("a vol of {float}")                      >= E_Set_Vol,
       Step ("a rate of {float}")                     >= E_Set_Rate,
+      Step ("a premium of {float}")                  >= E_Set_Premium,
       Step ("the price is {float} within {float}")   >= E_Check_Price,
       Step ("the price is at least {float}")         >= E_Check_Price_Floor,
       Step ("the delta is {float} within {float}")   >= E_Check_Delta,
       Step ("the delta is {word}")                   >= E_Check_Delta_Sign,
       Step ("the call and put deltas sum to {float} within {float}")
-                                                     >= E_Check_Delta_Sum];
+                                                     >= E_Check_Delta_Sum,
+      Step ("the vol it implies is sought")          >= E_Implied,
+      Step ("the implied vol recovers the vol that priced it within {float}")
+                                                     >= E_Check_Round_Trip,
+      Step ("the implied vol is {float} within {float}")
+                                                     >= E_Check_Iv,
+      Step ("the implied vol is {word}")             >= E_Check_Quality];
    --!format on
 
    Hook_Defs : constant Steps.Hook_Table := [Before >= Fresh_World];
