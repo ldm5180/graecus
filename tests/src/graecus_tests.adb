@@ -201,6 +201,18 @@ package body Graecus_Tests is
       Assert (Decay_Weight (1.0e6) = 1.0, "a huge gap saturates at 1");
    end Test_Decay;
 
+   --  The normal CDF's fixed points: one half at zero (to the 26.2.17
+   --  approximation's own bias, 5.3e-9 there), and saturated at the
+   --  +/-40 where its input is clamped.
+   procedure Test_Norm_Cdf (T : in out AUnit.Test_Cases.Test_Case'Class) is
+      pragma Unreferenced (T);
+      use Graecus;
+   begin
+      Assert (abs (Norm_Cdf (0.0) - 0.5) < 1.0e-6, "one half at zero");
+      Assert (abs (Norm_Cdf (40.0) - 1.0) < 1.0e-6, "saturated at +40");
+      Assert (abs Norm_Cdf (-40.0) < 1.0e-6, "saturated at -40");
+   end Test_Norm_Cdf;
+
    overriding
    procedure Register_Tests (T : in out Test) is
    begin
@@ -215,6 +227,8 @@ package body Graecus_Tests is
          Test_Round_Trip'Access,
          "price then invert recovers the vol, bounding the early exit");
       Register_Routine (T, Test_Decay'Access, "the EMA decay weight");
+      Register_Routine
+        (T, Test_Norm_Cdf'Access, "the normal CDF's fixed points");
    end Register_Tests;
 
    overriding
