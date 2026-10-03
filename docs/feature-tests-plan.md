@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G8 done (2026-10-03); G9 not started.
+**Status:** implemented 2026-10-03 (G0-G9); the second wave (section 6) is not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
