@@ -68,4 +68,37 @@ package Graecus_World is
    function Delta_Of (C : Contract; Right : Option_Right) return Real
    with Pre => Has (C, Priced_Terms);
 
+   --  The rate every fixture row was priced at.
+   Fixture_Rate : constant Real := 0.045;
+
+   --  One fixture row: the contract the Go library was handed, the vol
+   --  that priced its premium (none where the premium has no time
+   --  value), and the vol and delta the library answered.
+   type Fixture_Row is record
+      Right        : Option_Right := Call;
+      Spot         : Real := 0.0;
+      Strike       : Real := 0.0;
+      Years        : Real := 0.0;
+      Has_True_Vol : Boolean := False;
+      True_Vol     : Real := 0.0;
+      Premium      : Real := 0.0;
+      Go_Iv        : Real := 0.0;
+      Go_Delta     : Real := 0.0;
+   end record;
+
+   --  The row a fixture line holds, past its name.
+   function Row_Of (Line : String) return Fixture_Row;
+
+   --  Whether the fixture holds a row named Name for Right ("CALL",
+   --  "PUT", as the file spells them).
+   function Has_Row (Name, Right : String) return Boolean;
+
+   --  The row named Name for Right.
+   function Row (Name, Right : String) return Fixture_Row
+   with Pre => Has_Row (Name, Right);
+
+   --  The contract a row names: every term but a vol, at Fixture_Rate.
+   function Contract_Of (Row : Fixture_Row) return Contract
+   with Post => Has (Contract_Of'Result, Seeking_Terms);
+
 end Graecus_World;

@@ -40,22 +40,15 @@ package body Graecus_Tests is
             if Line'Length > 0 then
                declare
                   Name     : constant String := Field (Line, 1);
-                  Right    : constant Graecus.Option_Right :=
-                    (if Field (Line, 2) = "CALL"
-                     then Graecus.Call
-                     else Graecus.Put);
-                  S        : constant Graecus.Real :=
-                    Graecus.Real'Value (Field (Line, 3));
-                  K        : constant Graecus.Real :=
-                    Graecus.Real'Value (Field (Line, 4));
-                  T_Years  : constant Graecus.Real :=
-                    Graecus.Real'Value (Field (Line, 5));
-                  Premium  : constant Graecus.Real :=
-                    Graecus.Real'Value (Field (Line, 7));
-                  Go_Iv    : constant Graecus.Real :=
-                    Graecus.Real'Value (Field (Line, 9));
-                  Go_Delta : constant Graecus.Real :=
-                    Graecus.Real'Value (Field (Line, 10));
+                  Row      : constant Graecus_World.Fixture_Row :=
+                    Graecus_World.Row_Of (Line);
+                  Right    : Graecus.Option_Right renames Row.Right;
+                  S        : Graecus.Real renames Row.Spot;
+                  K        : Graecus.Real renames Row.Strike;
+                  T_Years  : Graecus.Real renames Row.Years;
+                  Premium  : Graecus.Real renames Row.Premium;
+                  Go_Iv    : Graecus.Real renames Row.Go_Iv;
+                  Go_Delta : Graecus.Real renames Row.Go_Delta;
 
                   --  The fixture classifies itself: rows with no true
                   --  vol are the outside-the-band cases (Clamped), and
@@ -64,22 +57,27 @@ package body Graecus_Tests is
                   --  are exactly the ones we must call Faint -- IV
                   --  numbers disagree there BY CONSTRUCTION, so only
                   --  the delta is asserted.
-                  True_Vol_Text : constant String := Field (Line, 6);
-
-                  Sick : constant Boolean := True_Vol_Text'Length = 0;
+                  Sick : constant Boolean := not Row.Has_True_Vol;
 
                   Go_Identified : constant Boolean :=
-                    not Sick
-                    and then abs (Go_Iv - Graecus.Real'Value (True_Vol_Text))
-                             <= 2.0e-3;
+                    not Sick and then abs (Go_Iv - Row.True_Vol) <= 2.0e-3;
 
                   Iv : Graecus.Vol_Range;
                   Q  : Graecus.Quality;
                   D  : Graecus.Real;
                begin
                   Graecus.Implied_Vol
-                    (Premium, S, K, T_Years, Rfr, Right, Iv, Q);
-                  D := Graecus.Delta_Of (S, K, T_Years, Iv, Rfr, Right);
+                    (Premium,
+                     S,
+                     K,
+                     T_Years,
+                     Graecus_World.Fixture_Rate,
+                     Right,
+                     Iv,
+                     Q);
+                  D :=
+                    Graecus.Delta_Of
+                      (S, K, T_Years, Iv, Graecus_World.Fixture_Rate, Right);
 
                   if Sick then
                      Assert
