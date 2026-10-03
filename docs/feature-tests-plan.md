@@ -1,5 +1,7 @@
 # Feature tests plan
 
+**Status:** G0 done (2026-10-03); G1-G9 not started.
+
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
 what the greeks do in the operator's words -- a deep in-the-money put's
@@ -265,6 +267,8 @@ existing fixture as the named file.
   commit says this in its message and adds one sentence to the
   CLAUDE.md contract: "test-only dependencies (aunit, fabula) are
   not the library's".
+- **Decided 2026-10-03:** the same manifest, as recommended -- the
+  contract is about the library, and the CLAUDE.md sentence says so.
 - **Fix:** `fabula = "*"` after `aunit`, and a new `[[pins]]` table
   (the crate has none today) with
   `fabula = { url = "https://github.com/ldm5180/fabula.git", commit = "746a234df5581c2e38c4202aeee8b07473fb6a51" }`
