@@ -22,7 +22,10 @@ package Graecus_Steps is
       E_Set_Rate,
       E_Check_Price,
       E_Check_Price_Floor,
-      E_Check_Vol_Refused);
+      E_Check_Vol_Refused,
+      E_Check_Delta,
+      E_Check_Delta_Sign,
+      E_Check_Delta_Sum);
 
    --  The steps that give the contract one of its terms.
    subtype Set_Step is Step_Kind range E_Set_Spot .. E_Set_Rate;
@@ -89,7 +92,11 @@ package Graecus_Steps is
       Step ("a vol of {float}")                      >= E_Set_Vol,
       Step ("a rate of {float}")                     >= E_Set_Rate,
       Step ("the price is {float} within {float}")   >= E_Check_Price,
-      Step ("the price is at least {float}")         >= E_Check_Price_Floor];
+      Step ("the price is at least {float}")         >= E_Check_Price_Floor,
+      Step ("the delta is {float} within {float}")   >= E_Check_Delta,
+      Step ("the delta is {word}")                   >= E_Check_Delta_Sign,
+      Step ("the call and put deltas sum to {float} within {float}")
+                                                     >= E_Check_Delta_Sum];
    --!format on
 
    Hook_Defs : constant Steps.Hook_Table := [Before >= Fresh_World];

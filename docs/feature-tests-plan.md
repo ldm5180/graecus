@@ -1,6 +1,6 @@
 # Feature tests plan
 
-**Status:** G0-G3 done (2026-10-03); G4-G9 not started.
+**Status:** G0-G4 done (2026-10-03); G5-G9 not started.
 
 The crate's behavior, stated in Gherkin and run against the proven
 functions themselves.  `*.feature` files under `tests/features/` say
@@ -491,8 +491,16 @@ existing fixture as the named file.
   within 0.01" for the at-the-money contract (the straddle).  The
   identity `Dc - Dp = 1` to 1e-9 is the mechanism's own property and
   stays in `Test_Properties`, as the Do-not list says.
-- **RED first:** `its delta is taken` is `UNDEFINED`; green on the
+- **RED first:** the delta checks are `UNDEFINED`; green on the
   sign outline.
+- **As implemented:** no `its delta is taken` step -- a check takes
+  the delta of the contract as it stands, as G3's checks price it.
+  The child is `Graecus_Steps.Deltas`: `delta` is an Ada reserved
+  word.  The all-or-nothing outline has four rows (a deep call and
+  put, a far call and put), and the straddle is at 7500 with 0.27
+  days and a vol of 0.12, whose deltas sum to 0.0094 -- `within
+  0.02`, since a 4-day straddle's sum is 0.028 (the call's delta
+  carries the drift and half the variance).
 
 ### G5 -- `implied-vol.feature`: a premium's vol, or why there is none
 
